@@ -14,8 +14,6 @@ Paste this **custom plugin repository URL** into Dalamud's **Experimental → Cu
 
 Save the setting, open `/xlplugins`, find **Sm0ll Chaos & Exdeath**, and install it. Enter `/dmuscale` in game to adjust the sliders. The feed points Dalamud to the packaged ZIP and allows future version updates through the plugin installer.
 
-If you prefer a manual dev-plugin installation, [download the ZIP directly](https://raw.githubusercontent.com/Tataru-business/sm0ll-chaos-exdeath/main/dist/Sm0ll-Chaos-and-Exdeath-dev-plugin.zip), extract it, then add the extracted `DMUModelScale.dll` under **Experimental → Dev Plugin Locations**.
-
 ## Build from source
 
 Install the **.NET 10 SDK** and a current XIVLauncher/Dalamud development distribution. Run `dotnet build -c Release` in this repository. The Dalamud.NET.Sdk packager writes the dev-plugin archive to `bin/Release/DMUModelScale/latest.zip`. If Dalamud is installed in a nonstandard location, set `DALAMUD_HOME` to the extracted Dalamud distribution before building.
