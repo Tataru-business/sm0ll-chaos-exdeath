@@ -1,10 +1,10 @@
 # Sm0ll Chaos & Exdeath
 
-A small Dalamud dev plugin for **Dancing Mad (Ultimate)**. In territory **1363**, it makes the rendered models of **Chaos** (BattleNpc BaseId 19508) and **Exdeath** (BattleNpc BaseId 19509) smaller on your screen. This can make the bosses less distracting during the fight.
+A small Dalamud plugin for **Dancing Mad (Ultimate)**. In territory **1363**, it makes the rendered models of **Chaos** (BattleNpc BaseId 19508) and **Exdeath** (BattleNpc BaseId 19509) smaller on your screen. This can make the bosses less distracting during the fight.
 
-The plugin starts enabled with each model at **60%** of its original render size. The `/dmuscale` settings window has an enable checkbox and separate Chaos and Exdeath sliders from **30% to 100%**.
+The plugin starts enabled with each model at **60%** of its original render size. The `/dmuscale` settings window has an enable checkbox, separate Chaos and Exdeath sliders from **30% to 100%**, and a **Move floating lifebar with model** checkbox. The lifebar checkbox is on by default; turning it off restores the original lifebar height while keeping the chosen model sizes.
 
-Only `DrawObject.Scale` is changed. The plugin does not write to hitboxes, positions, targeting state, or combat logic. It reapplies the chosen model scale on `Framework.Update` and restores the captured original scale when disabled, when you leave the duty, or when the plugin unloads while the same model is still present.
+The model size uses `DrawObject.Scale`. When the optional lifebar checkbox is on, the plugin also adjusts `NameplateOffsetTarget.Y` to lower the floating name and lifebar toward the smaller model. It does not write to hitboxes, positions, targeting state, or combat logic. It reapplies the chosen settings on `Framework.Update` and restores the captured originals when disabled, when you leave the duty, or when the plugin unloads while the same model is still present. The lifebar adjustment still needs an in-game check in the duty.
 
 ## Install through Dalamud
 

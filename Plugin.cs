@@ -83,7 +83,8 @@ public sealed unsafe class Plugin : IDalamudPlugin
             if (!captured.TryGetValue(address, out var state) ||
                 state.EntityId != obj.EntityId || state.BaseId != obj.BaseId || state.DrawAddress != drawAddress)
             {
-                state = new CapturedScale(obj.EntityId, obj.BaseId, drawAddress, draw->Scale);
+                state = new CapturedScale(obj.EntityId, obj.BaseId, drawAddress, draw->Scale,
+                    native->NameplateOffsetTarget.Y);
                 captured[address] = state;
             }
 
@@ -93,6 +94,10 @@ public sealed unsafe class Plugin : IDalamudPlugin
             target.Y *= factor;
             target.Z *= factor;
             SetRenderScale(draw, target);
+            if (config.MoveLifebarWithModel)
+                SetNameplateOffset(native, state, factor);
+            else
+                RestoreNameplateOffset(native, state);
         }
 
         // Never dereference an address after its object has left the table.
@@ -113,6 +118,41 @@ public sealed unsafe class Plugin : IDalamudPlugin
         draw->NotifyTransformChanged();
     }
 
+    private static void SetNameplateOffset(NativeGameObject* native, CapturedScale state, float factor)
+    {
+        var current = native->NameplateOffsetTarget.Y;
+        var height = native->Height;
+        if (!float.IsFinite(current) || !float.IsFinite(height) || height <= 0)
+            return;
+
+        // If the game changed the target offset, keep that as the new baseline.
+        if (state.LastAppliedNameplateOffsetY is float last && current != last)
+            state.OriginalNameplateOffsetY = current;
+
+        // Shrink the nameplate's height above the ground by the same factor as the model.
+        var adjusted = state.OriginalNameplateOffsetY + height * (factor - 1f);
+        if (!float.IsFinite(adjusted))
+            return;
+
+        native->NameplateOffsetTarget.Y = adjusted;
+        state.LastAppliedNameplateOffsetY = adjusted;
+    }
+
+    private static void RestoreNameplateOffset(NativeGameObject* native, CapturedScale state)
+    {
+        var current = native->NameplateOffsetTarget.Y;
+        if (state.LastAppliedNameplateOffsetY is float last && current == last)
+        {
+            current = state.OriginalNameplateOffsetY;
+            native->NameplateOffsetTarget.Y = current;
+        }
+
+        // Keep the game's latest offset as the baseline while the option is off.
+        if (float.IsFinite(current))
+            state.OriginalNameplateOffsetY = current;
+        state.LastAppliedNameplateOffsetY = null;
+    }
+
     private void RestoreVisibleModels()
     {
         if (captured.Count == 0)
@@ -124,9 +164,13 @@ public sealed unsafe class Plugin : IDalamudPlugin
                 obj.ObjectKind != ObjectKind.BattleNpc || obj.BaseId != state.BaseId || obj.EntityId != state.EntityId)
                 continue;
 
-            var draw = ((NativeGameObject*)obj.Address)->DrawObject;
+            var native = (NativeGameObject*)obj.Address;
+            var draw = native->DrawObject;
             if (draw != null && (nint)draw == state.DrawAddress)
+            {
                 SetRenderScale(draw, state.OriginalScale);
+                RestoreNameplateOffset(native, state);
+            }
         }
 
         captured.Clear();
@@ -142,6 +186,14 @@ public sealed unsafe class Plugin : IDalamudPlugin
         windows.RemoveAllWindows();
     }
 
-    private readonly record struct CapturedScale(uint EntityId, uint BaseId, nint DrawAddress, Vector3 OriginalScale);
+    private sealed class CapturedScale(uint entityId, uint baseId, nint drawAddress,
+        Vector3 originalScale, float originalNameplateOffsetY)
+    {
+        public uint EntityId { get; } = entityId;
+        public uint BaseId { get; } = baseId;
+        public nint DrawAddress { get; } = drawAddress;
+        public Vector3 OriginalScale { get; } = originalScale;
+        public float OriginalNameplateOffsetY { get; set; } = originalNameplateOffsetY;
+        public float? LastAppliedNameplateOffsetY { get; set; }
+    }
 }
-
