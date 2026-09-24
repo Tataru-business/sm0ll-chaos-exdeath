@@ -1,0 +1,20 @@
+[
+  {
+    "Author": "DMU Model Scale",
+    "Name": "Sm0ll Chaos & Exdeath",
+    "InternalName": "DMUModelScale",
+    "AssemblyVersion": "1.0.2.0",
+    "Description": "Changes the size of Chaos and Exdeath as they can be extremely distracting in this fight. Only their rendered models are scaled in Dancing Mad (Ultimate); hitboxes and combat data are unchanged.",
+    "ApplicableVersion": "any",
+    "RepoUrl": "https://github.com/Tataru-business/sm0ll-chaos-exdeath",
+    "DalamudApiLevel": 15,
+    "Punchline": "Locally shrink Chaos and Exdeath in Dancing Mad (Ultimate).",
+    "Tags": ["utility", "visual", "dmu"],
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/Tataru-business/sm0ll-chaos-exdeath/main/dist/Sm0ll-Chaos-and-Exdeath-dev-plugin.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/Tataru-business/sm0ll-chaos-exdeath/main/dist/Sm0ll-Chaos-and-Exdeath-dev-plugin.zip",
+    "LastUpdate": "1790281670"
+  }
+]
+
