@@ -14,7 +14,12 @@ public sealed class ConfigWindow : Window
     {
         this.config = config;
         this.save = save;
-        Size = new Vector2(430, 205);
+        Size = new Vector2(430, 285);
+        SizeConstraints = new WindowSizeConstraints
+        {
+            MinimumSize = new Vector2(430, 285),
+            MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
+        };
         SizeCondition = ImGuiCond.FirstUseEver;
     }
 
@@ -28,11 +33,13 @@ public sealed class ConfigWindow : Window
         }
 
         var chaos = config.ChaosScale;
+        ImGui.BeginDisabled(config.ChaoticMode);
         if (ImGui.SliderFloat("Chaos", ref chaos, 0.30f, 1.00f, "%.2f"))
         {
             config.ChaosScale = chaos;
             save();
         }
+        ImGui.EndDisabled();
 
         var exdeath = config.ExdeathScale;
         if (ImGui.SliderFloat("Exdeath", ref exdeath, 0.30f, 1.00f, "%.2f"))
@@ -41,7 +48,15 @@ public sealed class ConfigWindow : Window
             save();
         }
 
+        var chaoticMode = config.ChaoticMode;
+        if (ImGui.Checkbox("Chaotic mode", ref chaoticMode))
+        {
+            config.ChaoticMode = chaoticMode;
+            save();
+        }
+
         ImGui.TextWrapped("Changes the size of Chaos and Exdeath as they can be extremely distracting in this fight.");
+        ImGui.TextWrapped("Chaotic mode: Chaos is smallest while idle and full size while casting.");
 
         var moveLifebar = config.MoveLifebarWithModel;
         if (ImGui.Checkbox("Move floating lifebar with model", ref moveLifebar))

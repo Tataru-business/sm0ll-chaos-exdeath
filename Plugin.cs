@@ -18,6 +18,8 @@ public sealed unsafe class Plugin : IDalamudPlugin
     private const uint TerritoryId = 1363;
     private const uint ChaosBaseId = 19508;
     private const uint ExdeathBaseId = 19509;
+    private const float ChaoticChaosIdleScale = 0.30f;
+    private const float ChaoticChaosCastingScale = 1.00f;
     private const float LifebarHeightAdjustment = -0.33f;
     private const string Command = "/dmuscale";
 
@@ -89,7 +91,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
                 captured[address] = state;
             }
 
-            var factor = obj.BaseId == ChaosBaseId ? ClampScale(config.ChaosScale) : ClampScale(config.ExdeathScale);
+            var factor = GetVisualScale(obj);
             var target = state.OriginalScale;
             target.X *= factor;
             target.Y *= factor;
@@ -111,6 +113,18 @@ public sealed unsafe class Plugin : IDalamudPlugin
                 stale.Add(address);
         foreach (var address in stale)
             captured.Remove(address);
+    }
+
+    private float GetVisualScale(IGameObject obj)
+    {
+        if (obj.BaseId == ExdeathBaseId)
+            return ClampScale(config.ExdeathScale);
+        if (!config.ChaoticMode)
+            return ClampScale(config.ChaosScale);
+
+        return obj is IBattleChara battleChara && battleChara.IsCasting
+            ? ChaoticChaosCastingScale
+            : ChaoticChaosIdleScale;
     }
 
     private static void SetRenderScale(DrawObject* draw, Vector3 scale)

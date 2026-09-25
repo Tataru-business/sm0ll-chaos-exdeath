@@ -3,8 +3,8 @@
     "Author": "DMU Model Scale",
     "Name": "Sm0ll Chaos & Exdeath",
     "InternalName": "DMUModelScale",
-    "AssemblyVersion": "1.0.6.0",
-    "Description": "Applies independent visual model scale factors to Chaos and Exdeath in territory 1363, with an optional fixed floating lifebar adjustment. Does not edit hitboxes, positions, targeting, or combat data.",
+    "AssemblyVersion": "1.0.7.0",
+    "Description": "Applies visual model scaling to Chaos and Exdeath in territory 1363, with optional lifebar positioning and a Chaos casting mode. Does not edit hitboxes, positions, targeting, or combat data.",
     "ApplicableVersion": "any",
     "RepoUrl": "https://github.com/Tataru-business/sm0ll-chaos-exdeath",
     "DalamudApiLevel": 15,
@@ -14,6 +14,6 @@
     "IsTestingExclusive": false,
     "DownloadLinkInstall": "https://raw.githubusercontent.com/Tataru-business/sm0ll-chaos-exdeath/main/dist/Sm0ll-Chaos-and-Exdeath-dev-plugin.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/Tataru-business/sm0ll-chaos-exdeath/main/dist/Sm0ll-Chaos-and-Exdeath-dev-plugin.zip",
-    "LastUpdate": "1790327865"
+    "LastUpdate": "1790328733"
   }
 ]

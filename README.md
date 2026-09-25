@@ -2,7 +2,9 @@
 
 A small Dalamud plugin for **Dancing Mad (Ultimate)**. In territory **1363**, it makes the rendered models of **Chaos** (BattleNpc BaseId 19508) and **Exdeath** (BattleNpc BaseId 19509) smaller on your screen. This can make the bosses less distracting during the fight.
 
-The plugin starts enabled with each model at **60%** of its original render size. The `/dmuscale` settings window has an enable checkbox, separate Chaos and Exdeath sliders from **30% to 100%**, and a **Move floating lifebar with model** checkbox at the bottom. The checkbox is on by default. Turning it off restores the original lifebar height while keeping the chosen model sizes.
+The plugin starts enabled with each model at **60%** of its original render size. The `/dmuscale` settings window has an enable checkbox, separate Chaos and Exdeath sliders from **30% to 100%**, a **Chaotic mode** checkbox, and a **Move floating lifebar with model** checkbox at the bottom. The lifebar checkbox is on by default. Turning it off restores the original lifebar height while keeping the chosen model sizes.
+
+Chaotic mode is off by default. When enabled, Chaos uses **0.30** while not casting and **1.00** while casting. Its normal size slider is disabled until the mode is turned off. Exdeath keeps its own slider setting. This cast-driven behavior needs an in-game check.
 
 The model size uses `DrawObject.Scale`. When the optional lifebar checkbox is on, the plugin also adjusts `NameplateOffsetTarget.Y` to move the floating name and lifebar. Its fixed height adjustment is **−0.33** relative to the model scale. The plugin does not write to hitboxes, positions, targeting state, or combat logic. It reapplies the chosen settings on `Framework.Update` and restores the captured originals when disabled, when you leave the duty, or when the plugin unloads while the same model is still present. The lifebar adjustment still needs an in-game check in the duty.
 
