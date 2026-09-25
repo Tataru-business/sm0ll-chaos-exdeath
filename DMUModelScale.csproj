@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>1.0.4.0</Version>
+    <Version>1.0.6.0</Version>
     <Author>DMU Model Scale</Author>
     <Name>Sm0ll Chaos &amp; Exdeath</Name>
     <Punchline>Locally shrink Chaos and Exdeath models in Dancing Mad (Ultimate).</Punchline>
-    <Description>Applies independent visual model scale factors to Chaos and Exdeath in territory 1363, with an optional floating lifebar adjustment. Does not edit hitboxes, positions, targeting, or combat data.</Description>
+    <Description>Applies independent visual model scale factors to Chaos and Exdeath in territory 1363, with an optional fixed floating lifebar adjustment. Does not edit hitboxes, positions, targeting, or combat data.</Description>
     <RepoUrl>https://github.com/Tataru-business/sm0ll-chaos-exdeath</RepoUrl>
     <Tags>utility;visual;dmu</Tags>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

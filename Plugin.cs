@@ -18,6 +18,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     private const uint TerritoryId = 1363;
     private const uint ChaosBaseId = 19508;
     private const uint ExdeathBaseId = 19509;
+    private const float LifebarHeightAdjustment = -0.33f;
     private const string Command = "/dmuscale";
 
     [PluginService] private static IDalamudPluginInterface PluginInterface { get; set; } = null!;
@@ -95,7 +96,10 @@ public sealed unsafe class Plugin : IDalamudPlugin
             target.Z *= factor;
             SetRenderScale(draw, target);
             if (config.MoveLifebarWithModel)
-                SetNameplateOffset(native, state, factor);
+            {
+                var heightFactor = Math.Clamp(factor + LifebarHeightAdjustment, 0.00f, 1.00f);
+                SetNameplateOffset(native, state, heightFactor);
+            }
             else
                 RestoreNameplateOffset(native, state);
         }
@@ -118,7 +122,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         draw->NotifyTransformChanged();
     }
 
-    private static void SetNameplateOffset(NativeGameObject* native, CapturedScale state, float factor)
+    private static void SetNameplateOffset(NativeGameObject* native, CapturedScale state, float heightFactor)
     {
         var current = native->NameplateOffsetTarget.Y;
         var height = native->Height;
@@ -129,8 +133,8 @@ public sealed unsafe class Plugin : IDalamudPlugin
         if (state.LastAppliedNameplateOffsetY is float last && current != last)
             state.OriginalNameplateOffsetY = current;
 
-        // Shrink the nameplate's height above the ground by the same factor as the model.
-        var adjusted = state.OriginalNameplateOffsetY + height * (factor - 1f);
+        // Apply the fixed adjustment to place the nameplate below the model-only height.
+        var adjusted = state.OriginalNameplateOffsetY + height * (heightFactor - 1f);
         if (!float.IsFinite(adjusted))
             return;
 

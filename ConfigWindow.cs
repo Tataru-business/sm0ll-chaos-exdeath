@@ -41,13 +41,13 @@ public sealed class ConfigWindow : Window
             save();
         }
 
+        ImGui.TextWrapped("Changes the size of Chaos and Exdeath as they can be extremely distracting in this fight.");
+
         var moveLifebar = config.MoveLifebarWithModel;
         if (ImGui.Checkbox("Move floating lifebar with model", ref moveLifebar))
         {
             config.MoveLifebarWithModel = moveLifebar;
             save();
         }
-
-        ImGui.TextWrapped("Changes the size of Chaos and Exdeath as they can be extremely distracting in this fight.");
     }
 }
