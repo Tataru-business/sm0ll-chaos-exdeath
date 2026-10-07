@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.12.0
+
+- P1 Garuda and P2 Dancing Green model options now change the boss names locally.
+
 ## 1.0.11.0
 
 - Added optional P1 Garuda and P2 Dancing Green model swaps.

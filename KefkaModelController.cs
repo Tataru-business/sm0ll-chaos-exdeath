@@ -10,7 +10,7 @@ using FFXIVClientStructs.FFXIV.Common.Math;
 namespace DMUModelScale;
 
 /// <summary>Applies local render-model changes to the two Kefka phase actors.</summary>
-internal sealed unsafe class KefkaModelController(IObjectTable objectTable) : IDisposable
+internal sealed unsafe class KefkaModelController(IObjectTable objectTable, INamePlateGui namePlateGui) : IDisposable
 {
     // BNpcBase 19504 is P1 Kefka (and is reused by an untargetable P3 actor).
     // BNpcBase 19506 is P2 Kefka. ModelChara IDs come from the game data sheets.
@@ -30,7 +30,7 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable) : ID
     public string Status => status;
     public void ResetForNewPull() => phase2Seen = false;
 
-    public void Update(bool inDuty, bool useGarudaP1, bool useDancingGreenP2)
+    public void Update(bool inDuty, AudioPhase phase, bool useGarudaP1, bool useDancingGreenP2)
     {
         if (!inDuty)
             phase2Seen = false;
@@ -63,7 +63,8 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable) : ID
             if (!captured.TryGetValue(address, out var state) ||
                 state.EntityId != obj.EntityId || state.BaseId != obj.BaseId)
             {
-                state = new CapturedModel(obj.EntityId, obj.BaseId, native->ModelContainer.ModelCharaId);
+                state = new CapturedModel(obj.EntityId, obj.BaseId, native->ModelContainer.ModelCharaId,
+                    native->NameString);
                 captured[address] = state;
             }
 
@@ -83,15 +84,16 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable) : ID
             }
 
             var target = state.OriginalModelId;
-            if (inDuty && obj.BaseId == KefkaP1BaseId && useGarudaP1 &&
+            if (inDuty && phase == AudioPhase.Phase1 && obj.BaseId == KefkaP1BaseId && useGarudaP1 &&
                 !phase2Seen && obj.IsTargetable && state.OriginalModelId == KefkaP1OriginalModelId)
                 target = GarudaUwuModelId;
-            else if (inDuty && obj.BaseId == KefkaP2BaseId && useDancingGreenP2)
+            else if (inDuty && phase == AudioPhase.Phase2 && obj.BaseId == KefkaP2BaseId && useDancingGreenP2)
                 target = DancingGreenModelId;
 
             var current = native->ModelContainer.ModelCharaId;
             if (target == state.OriginalModelId)
             {
+                RestoreName(native, state);
                 if (!state.OwnsModel)
                     continue;
                 // If the game changed the model itself, do not overwrite it.
@@ -103,7 +105,11 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable) : ID
             }
 
             if (!state.OwnsModel && current != state.OriginalModelId)
+            {
+                RestoreName(native, state);
                 continue;
+            }
+            ApplyReplacementName(native, state, target == GarudaUwuModelId ? "Garuda" : "Dancing Green");
             if (current != target)
             {
                 state.OwnsModel = true;
@@ -151,6 +157,37 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable) : ID
         state.DrawAddress = 0;
     }
 
+    private void ApplyReplacementName(Character* native, CapturedModel state, string replacement)
+    {
+        var current = native->NameString;
+        if (state.AppliedName is { } applied && current != applied && current != state.OriginalName)
+        {
+            // Another system took over this name; leave it alone.
+            state.AppliedName = null;
+            return;
+        }
+        if (state.AppliedName is null && current != state.OriginalName)
+            return;
+        if (current != replacement)
+        {
+            native->SetName(replacement);
+            namePlateGui.RequestRedraw();
+        }
+        state.AppliedName = replacement;
+    }
+
+    private void RestoreName(Character* native, CapturedModel state)
+    {
+        if (state.AppliedName is not { } applied)
+            return;
+        if (native->NameString == applied)
+        {
+            native->SetName(state.OriginalName);
+            namePlateGui.RequestRedraw();
+        }
+        state.AppliedName = null;
+    }
+
     private static void ApplyGarudaVisualScale(Character* native, CapturedModel state)
     {
         var draw = native->DrawObject;
@@ -194,15 +231,18 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable) : ID
             }
             else if (state.PendingEnable)
                 native->EnableDraw();
+            RestoreName(native, state);
         }
         captured.Clear();
     }
 
-    private sealed class CapturedModel(uint entityId, uint baseId, int originalModelId)
+    private sealed class CapturedModel(uint entityId, uint baseId, int originalModelId, string originalName)
     {
         public uint EntityId { get; } = entityId;
         public uint BaseId { get; } = baseId;
         public int OriginalModelId { get; } = originalModelId;
+        public string OriginalName { get; } = originalName;
+        public string? AppliedName { get; set; }
         public int AppliedModelId { get; set; }
         public bool OwnsModel { get; set; }
         public bool PendingEnable { get; set; }

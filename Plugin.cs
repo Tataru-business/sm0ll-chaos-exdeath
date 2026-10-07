@@ -37,6 +37,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     [PluginService] private static IFramework Framework { get; set; } = null!;
     [PluginService] private static IClientState ClientState { get; set; } = null!;
     [PluginService] private static IObjectTable ObjectTable { get; set; } = null!;
+    [PluginService] private static INamePlateGui NamePlateGui { get; set; } = null!;
     [PluginService] private static ICommandManager CommandManager { get; set; } = null!;
     [PluginService] private static IGameConfig GameConfig { get; set; } = null!;
     [PluginService] private static IGameInteropProvider GameInteropProvider { get; set; } = null!;
@@ -61,7 +62,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         audio = new AudioController(GameConfig,
             Path.Combine(PluginInterface.ConfigDirectory.FullName, "BundledAudio", "1.0.11.0"));
         phaseTracker = new DmuPhaseTracker(ObjectTable);
-        modelController = new KefkaModelController(ObjectTable);
+        modelController = new KefkaModelController(ObjectTable, NamePlateGui);
         configWindow = new ConfigWindow(config, SaveConfig, () => audio.Status + actionHookStatus,
             () => modelController.Status);
         windows.AddWindow(configWindow);
@@ -97,8 +98,9 @@ public sealed unsafe class Plugin : IDalamudPlugin
     private void OnFrameworkUpdate(IFramework _)
     {
         var inDuty = config.Enabled && ClientState.IsLoggedIn && ClientState.TerritoryType == TerritoryId;
-        audio.Update(inDuty, phaseTracker.Update(inDuty), config);
-        modelController.Update(inDuty, config.ShowGarudaInPhase1, config.ShowDancingGreenInPhase2);
+        var phase = phaseTracker.Update(inDuty);
+        audio.Update(inDuty, phase, config);
+        modelController.Update(inDuty, phase, config.ShowGarudaInPhase1, config.ShowDancingGreenInPhase2);
         if (!config.Enabled || !ClientState.IsLoggedIn || ClientState.TerritoryType != TerritoryId)
         {
             RestoreVisibleModels();

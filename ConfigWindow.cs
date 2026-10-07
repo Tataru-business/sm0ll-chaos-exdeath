@@ -64,18 +64,18 @@ public sealed class ConfigWindow : Window
 
         ImGui.Separator();
         var garuda = config.ShowGarudaInPhase1;
-        if (ImGui.Checkbox("P1 Kefka as UWU Garuda", ref garuda))
+        if (ImGui.Checkbox("P1 Garuda (model + name)", ref garuda))
         {
             config.ShowGarudaInPhase1 = garuda;
             save();
         }
         var dancingGreen = config.ShowDancingGreenInPhase2;
-        if (ImGui.Checkbox("P2 Kefka as Dancing Green", ref dancingGreen))
+        if (ImGui.Checkbox("P2 Dancing Green (model + name)", ref dancingGreen))
         {
             config.ShowDancingGreenInPhase2 = dancingGreen;
             save();
         }
-        ImGui.TextWrapped("Model swaps change only your local visuals. Boss hitboxes and mechanics stay the same.");
+        ImGui.TextWrapped("Model swaps also change the boss name locally. Boss hitboxes and mechanics stay the same.");
         ImGui.TextWrapped(modelStatus());
 
         ImGui.Separator();
