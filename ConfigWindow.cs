@@ -18,10 +18,10 @@ public sealed class ConfigWindow : Window
         this.save = save;
         this.audioStatus = audioStatus;
         this.modelStatus = modelStatus;
-        Size = new Vector2(620, 635);
+        Size = new Vector2(620, 430);
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(620, 635),
+            MinimumSize = new Vector2(620, 430),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
         SizeCondition = ImGuiCond.FirstUseEver;
@@ -63,37 +63,17 @@ public sealed class ConfigWindow : Window
         ImGui.TextWrapped("Chaotic mode: Chaos is smallest while idle and full size while casting.");
 
         ImGui.Separator();
-        var garuda = config.ShowGarudaInPhase1;
-        if (ImGui.Checkbox("P1 Garuda (model + name)", ref garuda))
+        var brainrot = config.Brainrot;
+        if (ImGui.Checkbox("Brainrot", ref brainrot))
         {
-            config.ShowGarudaInPhase1 = garuda;
+            config.Brainrot = brainrot;
             save();
         }
-        var dancingGreen = config.ShowDancingGreenInPhase2;
-        if (ImGui.Checkbox("P2 Dancing Green (model + name)", ref dancingGreen))
-        {
-            config.ShowDancingGreenInPhase2 = dancingGreen;
-            save();
-        }
-        ImGui.TextWrapped("Model swaps also change the boss name locally. Boss hitboxes and mechanics stay the same.");
+        ImGui.TextWrapped("P1 Garuda and P2 Dancing Green models, names, clones and effects; phase music and P3 Bonk slams.");
+        ImGui.TextWrapped("Boss hitboxes and mechanics stay the same.");
         ImGui.TextWrapped(modelStatus());
-
-        ImGui.Separator();
-        var replaceBgm = config.ReplaceBgm;
-        if (ImGui.Checkbox("Replace fight BGM by phase", ref replaceBgm))
-        {
-            config.ReplaceBgm = replaceBgm;
-            save();
-        }
         ImGui.TextWrapped("Phase 1: Fallen Angel | Phase 2: Ride the Rhythm | Phase 3+: Circus. Each track loops until its phase ends.");
-
-        var slamSound = config.PlayKefkaSlamSound;
-        if (ImGui.Checkbox("Bonk on Kefka's P3 ground slams", ref slamSound))
-        {
-            config.PlayKefkaSlamSound = slamSound;
-            save();
-        }
-        ImGui.TextWrapped("All four audio clips are included in this local build. Audio only plays in Dancing Mad (Ultimate).");
+        ImGui.TextWrapped("All four audio clips are included. Audio only plays in Dancing Mad (Ultimate).");
         ImGui.TextWrapped(audioStatus());
 
         var moveLifebar = config.MoveLifebarWithModel;

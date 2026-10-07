@@ -16,12 +16,15 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable, INam
     // BNpcBase 19506 is P2 Kefka. ModelChara IDs come from the game data sheets.
     private const uint KefkaP1BaseId = 19504;
     private const uint KefkaP2BaseId = 19506;
+    private const uint KefkaP2CloneBaseId = 19513;
     private const uint ChaosP3BaseId = 19508;
     private const uint ExdeathP3BaseId = 19509;
     private const int KefkaP1OriginalModelId = 4966;
+    private const int KefkaP2CloneOriginalModelId = 2137;
     private const int GarudaUwuModelId = 2276;
     private const int DancingGreenModelId = 4412;
     private const float GarudaVisualScale = 1f / 3f; // UWU Garuda's BNpcBase scale 1.0 vs P1 Kefka's 3.0.
+    private const float DancingGreenCloneVisualScale = 0.5f;
 
     private readonly Dictionary<nint, CapturedModel> captured = new();
     private bool phase2Seen;
@@ -41,7 +44,7 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable, INam
             foreach (var obj in objectTable)
             {
                 if (obj.ObjectKind == ObjectKind.BattleNpc &&
-                    obj.BaseId is KefkaP2BaseId or ChaosP3BaseId or ExdeathP3BaseId)
+                    obj.BaseId is KefkaP2BaseId or KefkaP2CloneBaseId or ChaosP3BaseId or ExdeathP3BaseId)
                 {
                     phase2Seen = true;
                     break;
@@ -53,7 +56,7 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable, INam
         foreach (var obj in objectTable)
         {
             if (obj.ObjectKind != ObjectKind.BattleNpc ||
-                (obj.BaseId != KefkaP1BaseId && obj.BaseId != KefkaP2BaseId) ||
+                (obj.BaseId != KefkaP1BaseId && obj.BaseId != KefkaP2BaseId && obj.BaseId != KefkaP2CloneBaseId) ||
                 obj.Address == IntPtr.Zero)
                 continue;
 
@@ -89,6 +92,9 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable, INam
                 target = GarudaUwuModelId;
             else if (inDuty && phase == AudioPhase.Phase2 && obj.BaseId == KefkaP2BaseId && useDancingGreenP2)
                 target = DancingGreenModelId;
+            else if (inDuty && phase == AudioPhase.Phase2 && obj.BaseId == KefkaP2CloneBaseId &&
+                     useDancingGreenP2 && state.OriginalModelId == KefkaP2CloneOriginalModelId)
+                target = DancingGreenModelId;
 
             var current = native->ModelContainer.ModelCharaId;
             if (target == state.OriginalModelId)
@@ -119,7 +125,9 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable, INam
             }
 
             if (state.OwnsModel && target == GarudaUwuModelId)
-                ApplyGarudaVisualScale(native, state);
+                ApplyVisualScale(native, state, GarudaVisualScale);
+            else if (state.OwnsModel && target == DancingGreenModelId && obj.BaseId == KefkaP2CloneBaseId)
+                ApplyVisualScale(native, state, DancingGreenCloneVisualScale);
         }
 
         var stale = new List<nint>();
@@ -188,7 +196,7 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable, INam
         state.AppliedName = null;
     }
 
-    private static void ApplyGarudaVisualScale(Character* native, CapturedModel state)
+    private static void ApplyVisualScale(Character* native, CapturedModel state, float factor)
     {
         var draw = native->DrawObject;
         if (draw == null)
@@ -201,9 +209,9 @@ internal sealed unsafe class KefkaModelController(IObjectTable objectTable, INam
         }
 
         var target = state.DrawScale;
-        target.X *= GarudaVisualScale;
-        target.Y *= GarudaVisualScale;
-        target.Z *= GarudaVisualScale;
+        target.X *= factor;
+        target.Y *= factor;
+        target.Z *= factor;
         if (draw->Scale.X != target.X || draw->Scale.Y != target.Y || draw->Scale.Z != target.Z)
         {
             draw->Scale = target;

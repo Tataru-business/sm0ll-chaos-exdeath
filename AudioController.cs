@@ -24,13 +24,13 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
 
     public void QueueSlam() => Interlocked.Increment(ref pendingSlams);
 
-    public void Update(bool inDuty, AudioPhase phase, Configuration config)
+    public void Update(bool inDuty, AudioPhase phase, bool brainrot)
     {
-        UpdateBgm(inDuty, phase, config.ReplaceBgm);
+        UpdateBgm(inDuty, phase, brainrot);
 
         for (var i = effects.Count - 1; i >= 0; i--)
         {
-            if (!inDuty || !config.PlayKefkaSlamSound || effects[i].Output.PlaybackState == PlaybackState.Stopped)
+            if (!inDuty || !brainrot || effects[i].Output.PlaybackState == PlaybackState.Stopped)
             {
                 effects[i].Output.Dispose();
                 effects[i].Reader.Dispose();
@@ -39,7 +39,7 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
         }
 
         var slams = Math.Min(Interlocked.Exchange(ref pendingSlams, 0), 8);
-        if (!inDuty || !config.PlayKefkaSlamSound)
+        if (!inDuty || !brainrot)
         {
             failedBonk = false;
             return;
@@ -72,7 +72,7 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
         {
             StopBgm();
             failedBgmAsset = asset;
-            status = "Audio output stopped. Toggle the BGM option off and on to retry.";
+            status = "Audio output stopped. Toggle Brainrot off and on to retry.";
         }
 
         if (!inDuty || !replaceBgm)

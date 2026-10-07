@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>1.0.12.0</Version>
+    <Version>1.0.13.0</Version>
     <Author>DMU Model Scale</Author>
     <Name>Sm0ll Chaos &amp; Exdeath</Name>
     <Punchline>Locally shrink Chaos and Exdeath models in Dancing Mad (Ultimate).</Punchline>
-    <Description>Scales Chaos and Exdeath, with optional P1 Garuda and P2 Dancing Green models and local audio in Dancing Mad (Ultimate).</Description>
+    <Description>Scales Chaos and Exdeath in Dancing Mad (Ultimate). Brainrot adds phase model, name and VFX changes, bundled music, and a P3 slam sound.</Description>
     <RepoUrl>https://github.com/Tataru-business/sm0ll-chaos-exdeath</RepoUrl>
     <Tags>utility;visual;dmu</Tags>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

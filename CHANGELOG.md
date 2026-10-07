@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.13.0
+
+- Added Brainrot, a single toggle for the P1/P2 model, name, clone and VFX changes, phase music, and P3 slam sound.
+- Added Garuda Slipstream VFX in P1 and Dancing Green cleave and tankbuster VFX in P2.
+
 ## 1.0.12.0
 
 - P1 Garuda and P2 Dancing Green model options now change the boss names locally.

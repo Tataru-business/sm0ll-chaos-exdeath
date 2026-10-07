@@ -50,12 +50,20 @@ public sealed unsafe class Plugin : IDalamudPlugin
     private readonly AudioController audio;
     private readonly DmuPhaseTracker phaseTracker;
     private readonly KefkaModelController modelController;
+    private readonly VfxSwapController vfxSwapController;
     private Hook<ActionEffectHandler.Delegates.Receive>? actionEffectHook;
     private string actionHookStatus = string.Empty;
 
     public Plugin()
     {
         config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        if (config.Version < 2)
+        {
+            config.Brainrot = config.ShowGarudaInPhase1 || config.ShowDancingGreenInPhase2 ||
+                config.ReplaceBgm || config.PlayKefkaSlamSound;
+            config.Version = 2;
+            PluginInterface.SavePluginConfig(config);
+        }
         config.ChaosScale = ClampScale(config.ChaosScale);
         config.ExdeathScale = ClampScale(config.ExdeathScale);
 
@@ -63,8 +71,9 @@ public sealed unsafe class Plugin : IDalamudPlugin
             Path.Combine(PluginInterface.ConfigDirectory.FullName, "BundledAudio", "1.0.11.0"));
         phaseTracker = new DmuPhaseTracker(ObjectTable);
         modelController = new KefkaModelController(ObjectTable, NamePlateGui);
+        vfxSwapController = new VfxSwapController(GameInteropProvider);
         configWindow = new ConfigWindow(config, SaveConfig, () => audio.Status + actionHookStatus,
-            () => modelController.Status);
+            () => modelController.Status + vfxSwapController.Status);
         windows.AddWindow(configWindow);
         PluginInterface.UiBuilder.Draw += windows.Draw;
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfig;
@@ -99,8 +108,9 @@ public sealed unsafe class Plugin : IDalamudPlugin
     {
         var inDuty = config.Enabled && ClientState.IsLoggedIn && ClientState.TerritoryType == TerritoryId;
         var phase = phaseTracker.Update(inDuty);
-        audio.Update(inDuty, phase, config);
-        modelController.Update(inDuty, phase, config.ShowGarudaInPhase1, config.ShowDancingGreenInPhase2);
+        vfxSwapController.Update(inDuty, phase, config.Brainrot, config.Brainrot);
+        audio.Update(inDuty, phase, config.Brainrot);
+        modelController.Update(inDuty, phase, config.Brainrot, config.Brainrot);
         if (!config.Enabled || !ClientState.IsLoggedIn || ClientState.TerritoryType != TerritoryId)
         {
             RestoreVisibleModels();
@@ -169,7 +179,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         actionEffectHook!.Original(casterEntityId, caster, targetPos, header, effects, targets);
         try
         {
-            if (header != null && config.Enabled && config.PlayKefkaSlamSound &&
+            if (header != null && config.Enabled && config.Brainrot &&
                 header->ActionId is SlapHappyBigActionId or SlapHappySmallActionId or StompAMoleActionId)
                 audio.QueueSlam();
         }
@@ -262,6 +272,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     {
         actionEffectHook?.Disable();
         actionEffectHook?.Dispose();
+        vfxSwapController.Dispose();
         Framework.Update -= OnFrameworkUpdate;
         DutyState.DutyStarted -= OnNewPull;
         DutyState.DutyRecommenced -= OnNewPull;
