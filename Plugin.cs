@@ -1,14 +1,20 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
+using Dalamud.Game.DutyState;
+using Dalamud.Hooking;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Graphics.Scene;
 using FFXIVClientStructs.FFXIV.Common.Math;
+using FFXIVClientStructs.FFXIV.Client.Game.Character;
+using GameObjectId = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObjectId;
+using NumericsVector3 = System.Numerics.Vector3;
 using NativeGameObject = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject;
 
 namespace DMUModelScale;
@@ -18,6 +24,10 @@ public sealed unsafe class Plugin : IDalamudPlugin
     private const uint TerritoryId = 1363;
     private const uint ChaosBaseId = 19508;
     private const uint ExdeathBaseId = 19509;
+    // P3 impact IDs from BossMod's Dancing Mad (Ultimate) action list.
+    private const uint SlapHappyBigActionId = 47848;
+    private const uint SlapHappySmallActionId = 47849;
+    private const uint StompAMoleActionId = 47856;
     private const float ChaoticChaosIdleScale = 0.30f;
     private const float ChaoticChaosCastingScale = 1.00f;
     private const float LifebarHeightAdjustment = -0.33f;
@@ -28,11 +38,19 @@ public sealed unsafe class Plugin : IDalamudPlugin
     [PluginService] private static IClientState ClientState { get; set; } = null!;
     [PluginService] private static IObjectTable ObjectTable { get; set; } = null!;
     [PluginService] private static ICommandManager CommandManager { get; set; } = null!;
+    [PluginService] private static IGameConfig GameConfig { get; set; } = null!;
+    [PluginService] private static IGameInteropProvider GameInteropProvider { get; set; } = null!;
+    [PluginService] private static IDutyState DutyState { get; set; } = null!;
 
     private readonly Dictionary<nint, CapturedScale> captured = new();
     private readonly WindowSystem windows = new("DMUModelScale");
     private readonly ConfigWindow configWindow;
     private readonly Configuration config;
+    private readonly AudioController audio;
+    private readonly DmuPhaseTracker phaseTracker;
+    private readonly KefkaModelController modelController;
+    private Hook<ActionEffectHandler.Delegates.Receive>? actionEffectHook;
+    private string actionHookStatus = string.Empty;
 
     public Plugin()
     {
@@ -40,7 +58,12 @@ public sealed unsafe class Plugin : IDalamudPlugin
         config.ChaosScale = ClampScale(config.ChaosScale);
         config.ExdeathScale = ClampScale(config.ExdeathScale);
 
-        configWindow = new ConfigWindow(config, SaveConfig);
+        audio = new AudioController(GameConfig,
+            Path.Combine(PluginInterface.ConfigDirectory.FullName, "BundledAudio", "1.0.11.0"));
+        phaseTracker = new DmuPhaseTracker(ObjectTable);
+        modelController = new KefkaModelController(ObjectTable);
+        configWindow = new ConfigWindow(config, SaveConfig, () => audio.Status + actionHookStatus,
+            () => modelController.Status);
         windows.AddWindow(configWindow);
         PluginInterface.UiBuilder.Draw += windows.Draw;
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfig;
@@ -49,6 +72,20 @@ public sealed unsafe class Plugin : IDalamudPlugin
             HelpMessage = "Open the DMU Model Scale settings."
         });
         Framework.Update += OnFrameworkUpdate;
+        DutyState.DutyStarted += OnNewPull;
+        DutyState.DutyRecommenced += OnNewPull;
+        try
+        {
+            actionEffectHook = GameInteropProvider.HookFromAddress<ActionEffectHandler.Delegates.Receive>(
+                (nint)ActionEffectHandler.MemberFunctionPointers.Receive, OnActionEffect);
+            actionEffectHook.Enable();
+        }
+        catch (Exception ex)
+        {
+            actionHookStatus = $" Kefka slam detection is unavailable: {ex.Message}";
+            actionEffectHook?.Dispose();
+            actionEffectHook = null;
+        }
     }
 
     private static float ClampScale(float scale) => float.IsFinite(scale) ? Math.Clamp(scale, 0.30f, 1.00f) : 0.60f;
@@ -59,6 +96,9 @@ public sealed unsafe class Plugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework _)
     {
+        var inDuty = config.Enabled && ClientState.IsLoggedIn && ClientState.TerritoryType == TerritoryId;
+        audio.Update(inDuty, phaseTracker.Update(inDuty), config);
+        modelController.Update(inDuty, config.ShowGarudaInPhase1, config.ShowDancingGreenInPhase2);
         if (!config.Enabled || !ClientState.IsLoggedIn || ClientState.TerritoryType != TerritoryId)
         {
             RestoreVisibleModels();
@@ -113,6 +153,28 @@ public sealed unsafe class Plugin : IDalamudPlugin
                 stale.Add(address);
         foreach (var address in stale)
             captured.Remove(address);
+    }
+
+    private void OnNewPull(IDutyStateEventArgs _)
+    {
+        phaseTracker.ResetForNewPull();
+        modelController.ResetForNewPull();
+    }
+
+    private void OnActionEffect(uint casterEntityId, Character* caster, NumericsVector3* targetPos,
+        ActionEffectHandler.Header* header, ActionEffectHandler.TargetEffects* effects, GameObjectId* targets)
+    {
+        actionEffectHook!.Original(casterEntityId, caster, targetPos, header, effects, targets);
+        try
+        {
+            if (header != null && config.Enabled && config.PlayKefkaSlamSound &&
+                header->ActionId is SlapHappyBigActionId or SlapHappySmallActionId or StompAMoleActionId)
+                audio.QueueSlam();
+        }
+        catch
+        {
+            // A failed optional audio cue must never interrupt the game's action handling.
+        }
     }
 
     private float GetVisualScale(IGameObject obj)
@@ -196,7 +258,13 @@ public sealed unsafe class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        actionEffectHook?.Disable();
+        actionEffectHook?.Dispose();
         Framework.Update -= OnFrameworkUpdate;
+        DutyState.DutyStarted -= OnNewPull;
+        DutyState.DutyRecommenced -= OnNewPull;
+        audio.Dispose();
+        modelController.Dispose();
         RestoreVisibleModels();
         CommandManager.RemoveHandler(Command);
         PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfig;

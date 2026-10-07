@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>1.0.7.0</Version>
+    <Version>1.0.11.0</Version>
     <Author>DMU Model Scale</Author>
     <Name>Sm0ll Chaos &amp; Exdeath</Name>
     <Punchline>Locally shrink Chaos and Exdeath models in Dancing Mad (Ultimate).</Punchline>
-    <Description>Applies visual model scaling to Chaos and Exdeath in territory 1363, with optional lifebar positioning and a Chaos casting mode. Does not edit hitboxes, positions, targeting, or combat data.</Description>
+    <Description>Scales Chaos and Exdeath, with optional P1 Garuda and P2 Dancing Green models and local audio in Dancing Mad (Ultimate).</Description>
     <RepoUrl>https://github.com/Tataru-business/sm0ll-chaos-exdeath</RepoUrl>
     <Tags>utility;visual;dmu</Tags>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <EmbeddedResource Include="Assets\Audio\*.mp3" />
+  </ItemGroup>
 </Project>

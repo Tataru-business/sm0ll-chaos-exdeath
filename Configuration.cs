@@ -12,4 +12,8 @@ public sealed class Configuration : IPluginConfiguration
     public float ExdeathScale { get; set; } = 0.60f;
     public bool ChaoticMode { get; set; } = false;
     public bool MoveLifebarWithModel { get; set; } = true;
+    public bool ShowGarudaInPhase1 { get; set; } = false;
+    public bool ShowDancingGreenInPhase2 { get; set; } = false;
+    public bool ReplaceBgm { get; set; } = false;
+    public bool PlayKefkaSlamSound { get; set; } = false;
 }

@@ -3,8 +3,8 @@
     "Author": "DMU Model Scale",
     "Name": "Sm0ll Chaos & Exdeath",
     "InternalName": "DMUModelScale",
-    "AssemblyVersion": "1.0.7.0",
-    "Description": "Applies visual model scaling to Chaos and Exdeath in territory 1363, with optional lifebar positioning and a Chaos casting mode. Does not edit hitboxes, positions, targeting, or combat data.",
+    "AssemblyVersion": "1.0.11.0",
+    "Description": "Scales Chaos and Exdeath in territory 1363, with optional Kefka model swaps, phase-based bundled music, and a P3 slam sound. Visual options do not edit hitboxes, positions, targeting, or combat data.",
     "ApplicableVersion": "any",
     "RepoUrl": "https://github.com/Tataru-business/sm0ll-chaos-exdeath",
     "DalamudApiLevel": 15,
@@ -14,6 +14,6 @@
     "IsTestingExclusive": false,
     "DownloadLinkInstall": "https://raw.githubusercontent.com/Tataru-business/sm0ll-chaos-exdeath/main/dist/Sm0ll-Chaos-and-Exdeath-dev-plugin.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/Tataru-business/sm0ll-chaos-exdeath/main/dist/Sm0ll-Chaos-and-Exdeath-dev-plugin.zip",
-    "LastUpdate": "1790328733"
+    "LastUpdate": "1791382294"
   }
 ]
