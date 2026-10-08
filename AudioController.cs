@@ -4,11 +4,12 @@ using System.IO;
 using System.Threading;
 using Dalamud.Game.Config;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Sound;
 using NAudio.Wave;
 
 namespace DMUModelScale;
 
-internal sealed class AudioController(IGameConfig gameConfig, string cacheDirectory) : IDisposable
+internal sealed unsafe class AudioController(IGameConfig gameConfig, string cacheDirectory) : IDisposable
 {
     private readonly List<(WaveOutEvent Output, AudioFileReader Reader)> effects = new();
     private WaveOutEvent? bgmOutput;
@@ -16,7 +17,8 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
     private AudioPhase activeBgmPhase = AudioPhase.Outside;
     private string? failedBgmAsset;
     private bool failedBonk;
-    private uint? originalBgmSetting;
+    private bool gameBgmSuppressed;
+    private bool lastGameBgmEnabled = true;
     private int pendingSlams;
     private string status = "Audio options are off.";
 
@@ -68,13 +70,6 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
             AudioPhase.Phase2 => "Phase2.mp3",
             _ => "Circus.mp3"
         };
-        if (bgmOutput?.PlaybackState == PlaybackState.Stopped)
-        {
-            StopBgm();
-            failedBgmAsset = asset;
-            status = "Audio output stopped. Toggle Brainrot off and on to retry.";
-        }
-
         if (!inDuty || !replaceBgm)
         {
             StopBgm();
@@ -83,17 +78,61 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
             return;
         }
 
-        if (bgmOutput is not null && activeBgmPhase == phase)
+        if (!TryReadBgmSettings(out var enabled, out var volume))
+        {
+            StopBgm();
+            status = "Could not read the game's BGM volume or mute settings.";
             return;
+        }
 
-        StopBgm();
-        if (failedBgmAsset == asset)
+        if (!enabled || volume <= 0f)
+        {
+            if (bgmOutput?.PlaybackState == PlaybackState.Playing)
+                bgmOutput.Pause();
+            RestoreGameBgm();
+            failedBgmAsset = null;
+            status = "Bundled music is paused while game BGM or master sound is off.";
             return;
+        }
+
+        if (failedBgmAsset == asset)
+        {
+            RestoreGameBgm();
+            return;
+        }
 
         try
         {
+            SuppressGameBgm();
+        }
+        catch (Exception ex)
+        {
+            StopBgm();
+            status = $"Could not silence the game's BGM: {ex.Message}";
+            return;
+        }
+
+        if (bgmOutput?.PlaybackState == PlaybackState.Stopped)
+        {
+            StopBgm();
+            failedBgmAsset = asset;
+            status = "Audio output stopped. Toggle Brainrot off and on to retry.";
+            return;
+        }
+
+        if (bgmOutput is not null && activeBgmPhase == phase)
+        {
+            bgmReader!.Volume = volume;
+            if (bgmOutput.PlaybackState == PlaybackState.Paused)
+                bgmOutput.Play();
+            return;
+        }
+
+        StopBgm(false);
+        try
+        {
             var path = GetBundledPath(asset);
-            StartBgm(path, phase);
+            StartBgm(path, phase, volume);
         }
         catch (Exception ex)
         {
@@ -101,6 +140,59 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
             failedBgmAsset = asset;
             status = $"Bundled BGM could not start: {ex.Message}";
         }
+    }
+
+    private bool TryReadBgmSettings(out bool enabled, out float volume)
+    {
+        enabled = false;
+        volume = 0f;
+        if (!gameConfig.TryGet(SystemConfigOption.IsSndBgm, out uint bgmMuted) ||
+            !gameConfig.TryGet(SystemConfigOption.IsSndMaster, out uint masterMuted) ||
+            !gameConfig.TryGet(SystemConfigOption.SoundBgm, out uint bgmVolume) ||
+            !gameConfig.TryGet(SystemConfigOption.SoundMaster, out uint masterVolume))
+            return false;
+
+        lastGameBgmEnabled = bgmMuted == 0;
+        enabled = lastGameBgmEnabled && masterMuted == 0;
+        volume = Math.Clamp(bgmVolume / 100f, 0f, 1f) *
+            Math.Clamp(masterVolume / 100f, 0f, 1f);
+        return true;
+    }
+
+    private void SuppressGameBgm()
+    {
+        var sound = SoundManager.Instance();
+        if (sound == null)
+            throw new InvalidOperationException("The game's sound manager is unavailable.");
+
+        // Mute the native BGM bus without changing the player's BGM checkbox.
+        // Repeat on framework updates because the game can reapply its setting.
+        sound->SetBgmEnabled(false);
+        gameBgmSuppressed = true;
+    }
+
+    private void RestoreGameBgm()
+    {
+        if (!gameBgmSuppressed)
+            return;
+
+        var sound = SoundManager.Instance();
+        if (sound != null)
+        {
+            try
+            {
+                var enabled = gameConfig.TryGet(SystemConfigOption.IsSndBgm, out uint muted)
+                    ? muted == 0
+                    : lastGameBgmEnabled;
+                sound->SetBgmEnabled(enabled);
+            }
+            catch (Exception ex)
+            {
+                status = $"Could not restore the game's BGM: {ex.Message}";
+                return;
+            }
+        }
+        gameBgmSuppressed = false;
     }
 
     private string GetBundledPath(string fileName)
@@ -120,7 +212,7 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
         return path;
     }
 
-    private void StartBgm(string path, AudioPhase phase)
+    private void StartBgm(string path, AudioPhase phase, float volume)
     {
         activeBgmPhase = phase;
         try
@@ -128,14 +220,10 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
             bgmReader = new AudioFileReader(path);
             if (bgmReader.TotalTime <= TimeSpan.Zero)
                 throw new InvalidDataException("BGM file is empty.");
+            bgmReader.Volume = volume;
 
             bgmOutput = new WaveOutEvent();
             bgmOutput.Init(new LoopingSampleProvider(bgmReader));
-            if (!gameConfig.TryGet(SystemConfigOption.IsSndBgm, out uint current))
-                throw new InvalidOperationException("Could not read the game's BGM setting.");
-
-            originalBgmSetting = current;
-            gameConfig.Set(SystemConfigOption.IsSndBgm, 0u);
             bgmOutput.Play();
             var phaseName = phase switch
             {
@@ -143,7 +231,7 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
                 AudioPhase.Phase2 => "Phase 2",
                 _ => "Phase 3+ Circus"
             };
-            status = $"Playing bundled {phaseName} BGM on a loop; game BGM is muted.";
+            status = $"Playing bundled {phaseName} BGM at the game's BGM volume.";
         }
         catch
         {
@@ -152,7 +240,7 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
         }
     }
 
-    private void StopBgm()
+    private void StopBgm(bool restoreGameBgm = true)
     {
         bgmOutput?.Dispose();
         bgmOutput = null;
@@ -160,19 +248,8 @@ internal sealed class AudioController(IGameConfig gameConfig, string cacheDirect
         bgmReader = null;
         activeBgmPhase = AudioPhase.Outside;
 
-        if (originalBgmSetting is not { } original)
-            return;
-        try
-        {
-            // Respect a change the player made while the replacement was running.
-            if (gameConfig.TryGet(SystemConfigOption.IsSndBgm, out uint current) && current == 0)
-                gameConfig.Set(SystemConfigOption.IsSndBgm, original);
-            originalBgmSetting = null;
-        }
-        catch (Exception ex)
-        {
-            status = $"Could not restore the game BGM setting: {ex.Message}";
-        }
+        if (restoreGameBgm)
+            RestoreGameBgm();
     }
 
     private void PlayEffect(string path)

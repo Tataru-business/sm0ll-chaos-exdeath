@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.14.0
+
+- Bundled fight music now follows the game's BGM and master volume sliders and pauses when BGM is turned off. The game BGM checkbox is no longer changed by the plugin.
+
 ## 1.0.13.0
 
 - Added Brainrot, a single toggle for the P1/P2 model, name, clone and VFX changes, phase music, and P3 slam sound.

@@ -73,6 +73,7 @@ public sealed class ConfigWindow : Window
         ImGui.TextWrapped("Boss hitboxes and mechanics stay the same.");
         ImGui.TextWrapped(modelStatus());
         ImGui.TextWrapped("Phase 1: Fallen Angel | Phase 2: Ride the Rhythm | Phase 3+: Circus. Each track loops until its phase ends.");
+        ImGui.TextWrapped("Music follows the game's BGM and master volume sliders and pauses when BGM is off.");
         ImGui.TextWrapped("All four audio clips are included. Audio only plays in Dancing Mad (Ultimate).");
         ImGui.TextWrapped(audioStatus());
 
