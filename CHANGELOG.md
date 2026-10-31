@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.16.0
+
+- The floor video now fits the whole arena by default: a round floor of radius 20 centred on (100, 100), matching the Dancing Mad (Ultimate) arena. Settings saved by 1.0.15.0 are moved to these values once.
+- The floor video is placed at ground level automatically, using the lowest point your character stands at. Turn this off to set the height by hand.
+
 ## 1.0.15.0
 
 - Added a Phase 2 media file setting under Brainrot. Pick a video or audio file on your PC and its audio replaces the Phase 2 music. The file is played from disk and is never bundled.

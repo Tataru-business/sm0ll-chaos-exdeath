@@ -6,7 +6,7 @@ namespace DMUModelScale;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 2;
+    public int Version { get; set; } = 3;
     public bool Enabled { get; set; } = true;
     public float ChaosScale { get; set; } = 0.60f;
     public float ExdeathScale { get; set; } = 0.60f;
@@ -18,12 +18,14 @@ public sealed class Configuration : IPluginConfiguration
     public string Phase2MediaPath { get; set; } = string.Empty;
     public bool Phase2MediaMusic { get; set; } = true;
     public bool Phase2FloorVideo { get; set; } = true;
+    // Dancing Mad (Ultimate) is a round arena of radius 20 centred on (100, 100).
     public float FloorCenterX { get; set; } = 100f;
     public float FloorCenterZ { get; set; } = 100f;
     public float FloorHeight { get; set; } = 0f;
+    public bool FloorMatchPlayerHeight { get; set; } = true;
     public float FloorSize { get; set; } = 40f;
     public float FloorRotation { get; set; } = 0f;
-    public bool FloorRound { get; set; } = false;
+    public bool FloorRound { get; set; } = true;
     public bool FloorCropToFill { get; set; } = true;
     public float FloorOpacity { get; set; } = 0.85f;
     public bool FloorKeepHudVisible { get; set; } = true;

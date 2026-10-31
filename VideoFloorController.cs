@@ -32,6 +32,7 @@ internal sealed unsafe class VideoFloorController : IDisposable
     private VideoDecoder? decoder;
     private string? decoderPath;
     private long uploadedSerial;
+    private float? groundHeight;
     private string status = "Floor video is off.";
 
     private ID3D11Device* device;
@@ -65,7 +66,7 @@ internal sealed unsafe class VideoFloorController : IDisposable
     }
 
     /// <summary>Starts or stops the video. Called on each framework update.</summary>
-    public void Update(bool show, string? path)
+    public void Update(bool show, string? path, float? playerHeight)
     {
         lock (sync)
         {
@@ -75,12 +76,19 @@ internal sealed unsafe class VideoFloorController : IDisposable
                 status = path is null ? "Choose a media file to show it on the floor." : "Floor video shows only during Phase 2.";
                 return;
             }
+
+            // The arena floor is flat, so the lowest point the player stands at is the ground.
+            // Taking the minimum ignores jumps.
+            if (playerHeight is float height && float.IsFinite(height))
+                groundHeight = groundHeight is float known ? MathF.Min(known, height) : height;
+
             if (decoder is not null && string.Equals(decoderPath, path, StringComparison.OrdinalIgnoreCase))
                 return;
 
             StopDecoder();
             decoderPath = path;
             uploadedSerial = 0;
+            groundHeight = playerHeight is float start && float.IsFinite(start) ? start : null;
             decoder = new VideoDecoder(path, new FloorClock(path, audioClock, () => decoder?.Duration ?? 0));
         }
     }
@@ -215,7 +223,9 @@ internal sealed unsafe class VideoFloorController : IDisposable
         var angle = config.FloorRotation * MathF.PI / 180f;
         var cos = MathF.Cos(angle);
         var sin = MathF.Sin(angle);
-        var center = new Vector3(config.FloorCenterX, config.FloorHeight, config.FloorCenterZ);
+        var floorY = config.FloorMatchPlayerHeight && groundHeight is float ground ? ground : config.FloorHeight;
+        // Lift the video slightly so it does not flicker against the ground.
+        var center = new Vector3(config.FloorCenterX, floorY + 0.02f, config.FloorCenterZ);
 
         for (var row = 0; row <= rows; row++)
         {

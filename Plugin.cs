@@ -66,6 +66,17 @@ public sealed unsafe class Plugin : IDalamudPlugin
             config.Version = 2;
             PluginInterface.SavePluginConfig(config);
         }
+        if (config.Version < 3)
+        {
+            // 1.0.15.0 placed a square floor; fit it to the round arena instead.
+            config.FloorCenterX = 100f;
+            config.FloorCenterZ = 100f;
+            config.FloorSize = 40f;
+            config.FloorRound = true;
+            config.FloorMatchPlayerHeight = true;
+            config.Version = 3;
+            PluginInterface.SavePluginConfig(config);
+        }
         config.ChaosScale = ClampScale(config.ChaosScale);
         config.ExdeathScale = ClampScale(config.ExdeathScale);
 
@@ -117,7 +128,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         audio.Update(inDuty, phase, config.Brainrot, config.Phase2MediaMusic ? mediaPath : null);
         var showFloor = config.Enabled && config.Phase2FloorVideo &&
             ((inDuty && phase == AudioPhase.Phase2 && config.Brainrot) || configWindow.PreviewFloor);
-        videoFloor.Update(showFloor, mediaPath);
+        videoFloor.Update(showFloor, mediaPath, ObjectTable.LocalPlayer?.Position.Y);
         modelController.Update(inDuty, phase, config.Brainrot, config.Brainrot);
         if (!config.Enabled || !ClientState.IsLoggedIn || ClientState.TerritoryType != TerritoryId)
         {

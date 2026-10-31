@@ -170,7 +170,11 @@ public sealed class ConfigWindow : Window
         var opacity = config.FloorOpacity;
         changed |= ImGui.DragFloat("Center X", ref centerX, 0.1f, -1000f, 1000f, "%.1f");
         changed |= ImGui.DragFloat("Center Z", ref centerZ, 0.1f, -1000f, 1000f, "%.1f");
+        var matchHeight = config.FloorMatchPlayerHeight;
+        changed |= ImGui.Checkbox("Put it at ground level automatically", ref matchHeight);
+        ImGui.BeginDisabled(matchHeight);
         changed |= ImGui.DragFloat("Height", ref height, 0.02f, -1000f, 1000f, "%.2f");
+        ImGui.EndDisabled();
         changed |= ImGui.SliderFloat("Size", ref size, 5f, 100f, "%.1f yalms");
         changed |= ImGui.SliderFloat("Rotation", ref rotation, 0f, 360f, "%.0f deg");
         changed |= ImGui.SliderFloat("Opacity", ref opacity, 0.05f, 1f, "%.2f");
@@ -189,6 +193,7 @@ public sealed class ConfigWindow : Window
             config.FloorCenterX = centerX;
             config.FloorCenterZ = centerZ;
             config.FloorHeight = height;
+            config.FloorMatchPlayerHeight = matchHeight;
             config.FloorSize = Math.Clamp(size, 5f, 100f);
             config.FloorRotation = rotation;
             config.FloorOpacity = Math.Clamp(opacity, 0.05f, 1f);
