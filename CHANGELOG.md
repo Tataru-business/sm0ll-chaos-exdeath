@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.20.0
+
+- Removed the Phase 2 media file, floor video and video screen added in 1.0.15.0 to 1.0.19.0. Phase 2 plays the bundled Ride the Rhythm track again, as in 1.0.14.0.
+- Kept from 1.0.17.0: the game's own fight music is fully muted while bundled music plays, including the time-stretched BGM and stinger channels.
+
 ## 1.0.19.0
 
 - The Phase 2 video now plays on an upright screen 50 yalms south of the arena centre, facing the arena, instead of on the floor. Its bottom edge sits at ground level and its height follows the video's shape. Direction, distance, width, height and opacity can be changed, and the floor placement is still available.
