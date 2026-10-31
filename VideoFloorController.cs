@@ -4,36 +4,46 @@ using System.Diagnostics;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
-using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.Graphics.Render;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using TerraFX.Interop.DirectX;
 using TerraFX.Interop.Windows;
 using static TerraFX.Interop.Windows.Windows;
+using SceneCameraManager = FFXIVClientStructs.FFXIV.Client.Graphics.Scene.CameraManager;
 
 namespace DMUModelScale;
 
 /// <summary>
-/// Plays the player's Phase 2 media file as a flat video on the arena floor.
-/// It is a screen overlay: it does not change the game's floor, and it draws over players and effects.
+/// Plays the player's Phase 2 media file as a video on the arena floor.
+/// The floor is rendered with the game's depth buffer, so characters and bosses stay in front of it,
+/// and visible game UI is cut out of it.
 /// </summary>
 internal sealed unsafe class VideoFloorController : IDisposable
 {
-    private const int SquareCells = 24;
-    private const int RoundRings = 16;
-    private const int RoundSegments = 72;
+    private const int SquareCells = 32;
+    private const int RoundRings = 24;
+    private const int RoundSegments = 96;
+    // Anything this far above the floor plane (characters, bosses) is drawn in front of the video.
+    private const float OcclusionHeight = 0.15f;
+    // Lift the video slightly above the game's floor so the two never fight over the same pixels.
+    private const float FloorLift = 0.03f;
+    private const int MaxUiPieces = 2048;
 
     private readonly IUiBuilder uiBuilder;
-    private readonly IGameGui gameGui;
     private readonly Configuration config;
     private readonly Func<MediaClock?> audioClock;
     private readonly object sync = new();
-    private readonly List<Vector4> clipRects = new();
+    private readonly List<Vector4> uiPieces = new();
+    private readonly List<FloorVertex> floorVertices = new();
+    private readonly List<Vector2> maskVertices = new();
 
     private VideoDecoder? decoder;
     private string? decoderPath;
     private long uploadedSerial;
     private float? groundHeight;
     private string status = "Floor video is off.";
+    private string occlusionStatus = string.Empty;
 
     private ID3D11Device* device;
     private ID3D11DeviceContext* context;
@@ -42,15 +52,11 @@ internal sealed unsafe class VideoFloorController : IDisposable
     private int textureWidth;
     private int textureHeight;
     private bool textureHasMips;
+    private FloorRenderer? renderer;
 
-    private Vector2[] screen = Array.Empty<Vector2>();
-    private Vector2[] uvs = Array.Empty<Vector2>();
-    private bool[] inFront = Array.Empty<bool>();
-
-    public VideoFloorController(IUiBuilder uiBuilder, IGameGui gameGui, Configuration config, Func<MediaClock?> audioClock)
+    public VideoFloorController(IUiBuilder uiBuilder, Configuration config, Func<MediaClock?> audioClock)
     {
         this.uiBuilder = uiBuilder;
-        this.gameGui = gameGui;
         this.config = config;
         this.audioClock = audioClock;
         uiBuilder.Draw += Draw;
@@ -61,7 +67,7 @@ internal sealed unsafe class VideoFloorController : IDisposable
         get
         {
             lock (sync)
-                return decoder?.Status ?? status;
+                return decoder is null ? status : decoder.Status + occlusionStatus;
         }
     }
 
@@ -116,8 +122,10 @@ internal sealed unsafe class VideoFloorController : IDisposable
             }
             catch (Exception ex)
             {
-                // Never let the overlay break the game's UI frame.
+                // Never let the floor break the game's UI frame.
                 StopDecoder();
+                renderer?.Dispose();
+                renderer = null;
                 status = $"Floor video stopped: {ex.Message}";
             }
         }
@@ -196,16 +204,56 @@ internal sealed unsafe class VideoFloorController : IDisposable
 
     private void DrawFloor()
     {
+        var mainViewport = ImGui.GetMainViewport();
+        var viewportMin = mainViewport.Pos;
+        var viewportSize = mainViewport.Size;
+        var width = (int)viewportSize.X;
+        var height = (int)viewportSize.Y;
+        if (width <= 0 || height <= 0)
+            return;
+
+        var control = Control.Instance();
+        if (control == null)
+            return;
+        var viewProjection = control->ViewProjectionMatrix;
+        if (!TryGetCameraPosition(viewProjection, out var camera))
+            return;
+
+        var floorY = config.FloorMatchPlayerHeight && groundHeight is float ground ? ground : config.FloorHeight;
+        BuildFloor(floorY + FloorLift);
+        BuildUiMask(viewportMin, viewportSize);
+
+        renderer ??= new FloorRenderer(device, context);
+
+        ID3D11ShaderResourceView* sceneDepth = null;
+        var depthA = 0f;
+        var depthB = 0f;
+        var useDepth = config.FloorBehindCharacters && TryGetSceneDepth(out sceneDepth, out depthA, out depthB);
+
+        var constants = new FloorConstants
+        {
+            ViewProjection = viewProjection,
+            CameraAndFloor = new Vector4(camera, floorY),
+            Depth = new Vector4(depthA, depthB, OcclusionHeight, useDepth ? 1f : 0f),
+            Output = new Vector4(width, height, Math.Clamp(config.FloorOpacity, 0.05f, 1f), 0f)
+        };
+
+        renderer.Render(view, useDepth ? sceneDepth : null,
+            System.Runtime.InteropServices.CollectionsMarshal.AsSpan(floorVertices),
+            System.Runtime.InteropServices.CollectionsMarshal.AsSpan(maskVertices),
+            constants, width, height);
+
+        ImGui.GetBackgroundDrawList().AddImage(new ImTextureID((nint)renderer.Output),
+            viewportMin, viewportMin + viewportSize);
+    }
+
+    /// <summary>Builds the floor as a triangle list in world space.</summary>
+    private void BuildFloor(float floorY)
+    {
+        floorVertices.Clear();
         var round = config.FloorRound;
         var columns = round ? RoundSegments : SquareCells;
         var rows = round ? RoundRings : SquareCells;
-        var vertexCount = (columns + 1) * (rows + 1);
-        if (screen.Length < vertexCount)
-        {
-            screen = new Vector2[vertexCount];
-            uvs = new Vector2[vertexCount];
-            inFront = new bool[vertexCount];
-        }
 
         // Fit the video: crop its long side to fill the floor, or stretch it.
         var uHalf = 0.5f;
@@ -223,182 +271,93 @@ internal sealed unsafe class VideoFloorController : IDisposable
         var angle = config.FloorRotation * MathF.PI / 180f;
         var cos = MathF.Cos(angle);
         var sin = MathF.Sin(angle);
-        var floorY = config.FloorMatchPlayerHeight && groundHeight is float ground ? ground : config.FloorHeight;
-        // Lift the video slightly so it does not flicker against the ground.
-        var center = new Vector3(config.FloorCenterX, floorY + 0.02f, config.FloorCenterZ);
 
-        for (var row = 0; row <= rows; row++)
+        FloorVertex Vertex(int row, int column)
         {
-            for (var column = 0; column <= columns; column++)
+            // Local floor position in -0.5..0.5. +X is east and +Z is south, so the video
+            // reads normally from above with north at the top.
+            float s, t;
+            if (round)
             {
-                // Local floor position in -0.5..0.5. +X is east and +Z is south, so the video
-                // reads normally from above with north at the top.
-                float s, t;
-                if (round)
-                {
-                    var radius = row / (float)rows * 0.5f;
-                    var theta = column / (float)columns * MathF.Tau;
-                    s = radius * MathF.Cos(theta);
-                    t = radius * MathF.Sin(theta);
-                }
-                else
-                {
-                    s = column / (float)columns - 0.5f;
-                    t = row / (float)rows - 0.5f;
-                }
-
-                var x = s * size;
-                var z = t * size;
-                var world = center + new Vector3(x * cos - z * sin, 0f, x * sin + z * cos);
-                var index = row * (columns + 1) + column;
-                inFront[index] = gameGui.WorldToScreen(world, out screen[index], out _);
-                uvs[index] = new Vector2(0.5f + s * 2f * uHalf, 0.5f + t * 2f * vHalf);
+                var radius = row / (float)rows * 0.5f;
+                var theta = column / (float)columns * MathF.Tau;
+                s = radius * MathF.Cos(theta);
+                t = radius * MathF.Sin(theta);
             }
+            else
+            {
+                s = column / (float)columns - 0.5f;
+                t = row / (float)rows - 0.5f;
+            }
+
+            var x = s * size;
+            var z = t * size;
+            var world = new Vector3(config.FloorCenterX + x * cos - z * sin, floorY, config.FloorCenterZ + x * sin + z * cos);
+            return new FloorVertex(world, new Vector2(0.5f + s * 2f * uHalf, 0.5f + t * 2f * vHalf));
         }
 
-        var viewport = ImGui.GetMainViewport();
-        var viewportMin = viewport.Pos;
-        var viewportMax = viewport.Pos + viewport.Size;
-        BuildClipRects(viewportMin, viewportMax);
-
-        var drawList = ImGui.GetBackgroundDrawList();
-        var textureId = new ImTextureID((nint)view);
-        var color = ImGui.GetColorU32(new Vector4(1f, 1f, 1f, Math.Clamp(config.FloorOpacity, 0.05f, 1f)));
-
-        foreach (var clip in clipRects)
+        for (var row = 0; row < rows; row++)
         {
-            drawList.PushClipRect(new Vector2(clip.X, clip.Y), new Vector2(clip.Z, clip.W), true);
-            for (var row = 0; row < rows; row++)
+            for (var column = 0; column < columns; column++)
             {
-                for (var column = 0; column < columns; column++)
-                {
-                    var a = row * (columns + 1) + column;
-                    var b = a + 1;
-                    var c = a + columns + 2;
-                    var d = a + columns + 1;
-                    // Skip cells that reach behind the camera; their projection is not usable.
-                    if (!inFront[a] || !inFront[b] || !inFront[c] || !inFront[d])
-                        continue;
-
-                    var minX = MathF.Min(MathF.Min(screen[a].X, screen[b].X), MathF.Min(screen[c].X, screen[d].X));
-                    var maxX = MathF.Max(MathF.Max(screen[a].X, screen[b].X), MathF.Max(screen[c].X, screen[d].X));
-                    var minY = MathF.Min(MathF.Min(screen[a].Y, screen[b].Y), MathF.Min(screen[c].Y, screen[d].Y));
-                    var maxY = MathF.Max(MathF.Max(screen[a].Y, screen[b].Y), MathF.Max(screen[c].Y, screen[d].Y));
-                    if (maxX < clip.X || minX > clip.Z || maxY < clip.Y || minY > clip.W)
-                        continue;
-
-                    drawList.AddImageQuad(textureId, screen[a], screen[b], screen[c], screen[d],
-                        uvs[a], uvs[b], uvs[c], uvs[d], color);
-                }
+                var a = Vertex(row, column);
+                var b = Vertex(row, column + 1);
+                var c = Vertex(row + 1, column + 1);
+                var d = Vertex(row + 1, column);
+                floorVertices.Add(a);
+                floorVertices.Add(b);
+                floorVertices.Add(c);
+                floorVertices.Add(a);
+                floorVertices.Add(c);
+                floorVertices.Add(d);
             }
-            drawList.PopClipRect();
         }
     }
 
-    /// <summary>
-    /// Splits the screen into rectangles that avoid visible game UI windows, so the
-    /// floor never covers hotbars, the party list or chat.
-    /// </summary>
-    private void BuildClipRects(Vector2 viewportMin, Vector2 viewportMax)
+    /// <summary>Collects every drawn piece of game UI as triangles to cut out of the floor.</summary>
+    private void BuildUiMask(Vector2 viewportMin, Vector2 viewportSize)
     {
-        clipRects.Clear();
-        var full = new Vector4(viewportMin.X, viewportMin.Y, viewportMax.X, viewportMax.Y);
+        maskVertices.Clear();
         if (!config.FloorKeepHudVisible)
-        {
-            clipRects.Add(full);
             return;
-        }
 
-        var hud = new List<Vector4>();
-        var screenArea = (viewportMax.X - viewportMin.X) * (viewportMax.Y - viewportMin.Y);
+        uiPieces.Clear();
+        var screenArea = viewportSize.X * viewportSize.Y;
         var stage = AtkStage.Instance();
-        if (stage != null && stage->RaptureAtkUnitManager != null)
-        {
-            ref var list = ref stage->RaptureAtkUnitManager->AtkUnitManager.AllLoadedUnitsList;
-            for (var i = 0; i < list.Count; i++)
-            {
-                var unit = list.Entries[i].Value;
-                if (unit == null || !unit->IsVisible || unit->RootNode == null)
-                    continue;
-
-                // A window's declared size is often much larger than what it draws, and some
-                // windows are "visible" while drawing nothing. Use only the parts actually on screen.
-                var bounds = new Vector4(float.MaxValue, float.MaxValue, float.MinValue, float.MinValue);
-                AddDrawnParts(&unit->UldManager, ref bounds, 0);
-                if (bounds.X >= bounds.Z || bounds.Y >= bounds.W)
-                    continue;
-                var width = bounds.Z - bounds.X;
-                var height = bounds.W - bounds.Y;
-                // Full-screen layers such as nameplates and screen text would hide the whole floor.
-                if (width <= 1 || height <= 1 || width * height > screenArea * 0.4f)
-                    continue;
-                hud.Add(new Vector4(viewportMin.X + bounds.X, viewportMin.Y + bounds.Y,
-                    viewportMin.X + bounds.Z, viewportMin.Y + bounds.W));
-            }
-        }
-
-        if (hud.Count == 0)
-        {
-            clipRects.Add(full);
+        if (stage == null || stage->RaptureAtkUnitManager == null)
             return;
-        }
 
-        var xs = new List<float> { full.X, full.Z };
-        var ys = new List<float> { full.Y, full.W };
-        foreach (var rect in hud)
+        ref var list = ref stage->RaptureAtkUnitManager->AtkUnitManager.AllLoadedUnitsList;
+        for (var i = 0; i < list.Count && uiPieces.Count < MaxUiPieces; i++)
         {
-            xs.Add(Math.Clamp(rect.X, full.X, full.Z));
-            xs.Add(Math.Clamp(rect.Z, full.X, full.Z));
-            ys.Add(Math.Clamp(rect.Y, full.Y, full.W));
-            ys.Add(Math.Clamp(rect.W, full.Y, full.W));
-        }
-        xs.Sort();
-        ys.Sort();
-
-        for (var yi = 0; yi < ys.Count - 1; yi++)
-        {
-            var top = ys[yi];
-            var bottom = ys[yi + 1];
-            if (bottom - top < 0.5f)
+            var unit = list.Entries[i].Value;
+            if (unit == null || !unit->IsVisible || unit->RootNode == null)
                 continue;
-            var midY = (top + bottom) * 0.5f;
-            var runStart = float.NaN;
-            for (var xi = 0; xi < xs.Count - 1; xi++)
-            {
-                var left = xs[xi];
-                var right = xs[xi + 1];
-                if (right - left < 0.5f)
-                    continue;
-                var midX = (left + right) * 0.5f;
-                var covered = false;
-                foreach (var rect in hud)
-                {
-                    if (midX > rect.X && midX < rect.Z && midY > rect.Y && midY < rect.W)
-                    {
-                        covered = true;
-                        break;
-                    }
-                }
+            AddDrawnParts(&unit->UldManager, uiPieces, screenArea, 0);
+        }
 
-                if (!covered && float.IsNaN(runStart))
-                    runStart = left;
-                if (covered && !float.IsNaN(runStart))
-                {
-                    AddClip(runStart, top, left, bottom);
-                    runStart = float.NaN;
-                }
-            }
-            if (!float.IsNaN(runStart))
-                AddClip(runStart, top, xs[^1], bottom);
+        foreach (var piece in uiPieces)
+        {
+            // Screen pixels to clip space.
+            var left = piece.X / viewportSize.X * 2f - 1f;
+            var right = piece.Z / viewportSize.X * 2f - 1f;
+            var top = 1f - piece.Y / viewportSize.Y * 2f;
+            var bottom = 1f - piece.W / viewportSize.Y * 2f;
+            maskVertices.Add(new Vector2(left, top));
+            maskVertices.Add(new Vector2(right, top));
+            maskVertices.Add(new Vector2(right, bottom));
+            maskVertices.Add(new Vector2(left, top));
+            maskVertices.Add(new Vector2(right, bottom));
+            maskVertices.Add(new Vector2(left, bottom));
         }
     }
 
-    /// <summary>Grows <paramref name="bounds"/> to cover every image and text node that is actually drawn.</summary>
-    private static void AddDrawnParts(AtkUldManager* uld, ref Vector4 bounds, int depth)
+    /// <summary>Adds the screen rectangle of every image and text node that is actually drawn.</summary>
+    private static void AddDrawnParts(AtkUldManager* uld, List<Vector4> pieces, float screenArea, int depth)
     {
         if (uld == null || uld->NodeList == null)
             return;
-        for (var i = 0; i < uld->NodeListCount; i++)
+        for (var i = 0; i < uld->NodeListCount && pieces.Count < MaxUiPieces; i++)
         {
             var node = uld->NodeList[i];
             if (node == null)
@@ -409,7 +368,7 @@ internal sealed unsafe class VideoFloorController : IDisposable
                 // Component nodes (buttons, gauges, lists) keep their parts in their own node list.
                 var component = ((AtkComponentNode*)node)->Component;
                 if (component != null && depth < 4)
-                    AddDrawnParts(&component->UldManager, ref bounds, depth + 1);
+                    AddDrawnParts(&component->UldManager, pieces, screenArea, depth + 1);
                 continue;
             }
 
@@ -424,8 +383,10 @@ internal sealed unsafe class VideoFloorController : IDisposable
             var bottom = top + node->Height * scaleY;
             if (!float.IsFinite(left) || !float.IsFinite(top) || !float.IsFinite(right) || !float.IsFinite(bottom))
                 continue;
-            bounds = new Vector4(MathF.Min(bounds.X, left), MathF.Min(bounds.Y, top),
-                MathF.Max(bounds.Z, right), MathF.Max(bounds.W, bottom));
+            // Full-screen layers (screen tints, nameplate canvases) would hide the whole floor.
+            if ((right - left) * (bottom - top) > screenArea * 0.25f)
+                continue;
+            pieces.Add(new Vector4(left, top, right, bottom));
         }
     }
 
@@ -444,19 +405,122 @@ internal sealed unsafe class VideoFloorController : IDisposable
         return scaleX > 0 && scaleY > 0;
     }
 
-    private void AddClip(float left, float top, float right, float bottom)
+    /// <summary>
+    /// Finds the game's scene depth buffer and how its values map to view distance:
+    /// distance = B / (depth - A). This form covers standard and reverse-Z, finite or infinite far planes.
+    /// </summary>
+    private bool TryGetSceneDepth(out ID3D11ShaderResourceView* depth, out float a, out float b)
     {
-        // Merge with the rectangle directly above when it spans the same columns.
-        for (var i = clipRects.Count - 1; i >= 0; i--)
+        depth = null;
+        a = 0f;
+        b = 0f;
+
+        var targets = RenderTargetManager.Instance();
+        if (targets == null || targets->DepthStencil == null || targets->DepthStencil->D3D11ShaderResourceView == null)
         {
-            var above = clipRects[i];
-            if (above.W == top && above.X == left && above.Z == right)
+            occlusionStatus = " Characters cannot be kept in front: the game's depth buffer is unavailable.";
+            return false;
+        }
+
+        var cameras = SceneCameraManager.Instance();
+        var camera = cameras == null ? null : cameras->CurrentCamera;
+        if (camera == null || camera->RenderCamera == null)
+        {
+            occlusionStatus = " Characters cannot be kept in front: the camera is unavailable.";
+            return false;
+        }
+
+        var renderCamera = camera->RenderCamera;
+        if (!TryDepthMapping(renderCamera->ProjectionMatrix, out a, out b) &&
+            !TryDepthMapping(renderCamera->ProjectionMatrix2, out a, out b) &&
+            !TryDepthMapping(Matrix4x4.Transpose(renderCamera->ProjectionMatrix), out a, out b) &&
+            !TryDepthFromPlanes(renderCamera->NearPlane, renderCamera->FarPlane, renderCamera->StandardZ,
+                renderCamera->FiniteFarPlane, out a, out b))
+        {
+            occlusionStatus = " Characters cannot be kept in front: the camera's depth range is unknown.";
+            return false;
+        }
+
+        depth = (ID3D11ShaderResourceView*)targets->DepthStencil->D3D11ShaderResourceView;
+        occlusionStatus = " Characters are drawn in front of the video.";
+        return true;
+    }
+
+    /// <summary>Reads the depth mapping from a projection matrix by projecting two points in front of the camera.</summary>
+    private static bool TryDepthMapping(Matrix4x4 projection, out float a, out float b)
+    {
+        a = 0f;
+        b = 0f;
+        if (!TryProjectDepth(projection, 2f, out var near) || !TryProjectDepth(projection, 50f, out var far))
+            return false;
+        // The scene buffer is reverse-Z: closer points have larger depth values.
+        if (near <= far + 1e-6f || near > 1.001f || far < -0.001f)
+            return false;
+        b = (near - far) / (1f / 2f - 1f / 50f);
+        a = near - b / 2f;
+        return float.IsFinite(a) && float.IsFinite(b) && b > 0f;
+    }
+
+    private static bool TryProjectDepth(Matrix4x4 projection, float distance, out float depth)
+    {
+        foreach (var sign in new[] { 1f, -1f })
+        {
+            var clip = Vector4.Transform(new Vector4(0f, 0f, sign * distance, 1f), projection);
+            if (MathF.Abs(clip.W - distance) < distance * 0.01f)
             {
-                clipRects[i] = new Vector4(left, above.Y, right, bottom);
-                return;
+                depth = clip.Z / clip.W;
+                return float.IsFinite(depth);
             }
         }
-        clipRects.Add(new Vector4(left, top, right, bottom));
+        depth = 0f;
+        return false;
+    }
+
+    private static bool TryDepthFromPlanes(float near, float far, bool standardZ, bool finiteFar, out float a, out float b)
+    {
+        a = 0f;
+        b = 0f;
+        if (!(near > 0f) || (finiteFar && !(far > near)))
+            return false;
+        if (!standardZ && finiteFar)
+        {
+            a = -near / (far - near);
+            b = near * far / (far - near);
+        }
+        else if (!standardZ)
+        {
+            a = 0f;
+            b = near;
+        }
+        else if (finiteFar)
+        {
+            a = far / (far - near);
+            b = -near * far / (far - near);
+        }
+        else
+        {
+            a = 1f;
+            b = -near;
+        }
+        return true;
+    }
+
+    /// <summary>The camera is the one point that projects to x = y = w = 0.</summary>
+    internal static bool TryGetCameraPosition(Matrix4x4 m, out Vector3 position)
+    {
+        var system = new Matrix4x4(
+            m.M11, m.M21, m.M31, 0f,
+            m.M12, m.M22, m.M32, 0f,
+            m.M14, m.M24, m.M34, 0f,
+            0f, 0f, 0f, 1f);
+        if (!Matrix4x4.Invert(system, out var inverse))
+        {
+            position = default;
+            return false;
+        }
+        var solved = Vector4.Transform(new Vector4(-m.M41, -m.M42, -m.M44, 1f), Matrix4x4.Transpose(inverse));
+        position = new Vector3(solved.X, solved.Y, solved.Z);
+        return float.IsFinite(position.X) && float.IsFinite(position.Y) && float.IsFinite(position.Z);
     }
 
     private void ReleaseTexture()
@@ -483,6 +547,8 @@ internal sealed unsafe class VideoFloorController : IDisposable
         lock (sync)
         {
             StopDecoder();
+            renderer?.Dispose();
+            renderer = null;
             ReleaseTexture();
             if (context != null)
                 context->Release();

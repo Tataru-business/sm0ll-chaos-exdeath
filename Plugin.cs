@@ -42,8 +42,6 @@ public sealed unsafe class Plugin : IDalamudPlugin
     [PluginService] private static IGameConfig GameConfig { get; set; } = null!;
     [PluginService] private static IGameInteropProvider GameInteropProvider { get; set; } = null!;
     [PluginService] private static IDutyState DutyState { get; set; } = null!;
-    [PluginService] private static IGameGui GameGui { get; set; } = null!;
-
     private readonly Dictionary<nint, CapturedScale> captured = new();
     private readonly WindowSystem windows = new("DMUModelScale");
     private readonly ConfigWindow configWindow;
@@ -85,7 +83,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         phaseTracker = new DmuPhaseTracker(ObjectTable);
         modelController = new KefkaModelController(ObjectTable, NamePlateGui);
         vfxSwapController = new VfxSwapController(GameInteropProvider);
-        videoFloor = new VideoFloorController(PluginInterface.UiBuilder, GameGui, config, () => audio.CurrentMediaClock);
+        videoFloor = new VideoFloorController(PluginInterface.UiBuilder, config, () => audio.CurrentMediaClock);
         configWindow = new ConfigWindow(config, SaveConfig, () => audio.Status + actionHookStatus,
             () => modelController.Status + vfxSwapController.Status, () => videoFloor.Status,
             () => ObjectTable.LocalPlayer?.Position);

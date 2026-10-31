@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.18.0
+
+- The floor video is now rendered on the GPU using the game's depth buffer, so characters and bosses stay in front of it instead of being covered. Turn off "Keep characters in front of the video" if this misbehaves.
+- Keep HUD visible now cuts out each drawn piece of game UI exactly, instead of large rectangles around whole windows.
+- The video uses anisotropic filtering, so it stays sharp when seen at low camera angles.
+
 ## 1.0.17.0
 
 - Fixed rectangular holes in the floor video. Keep HUD visible now cuts out only the parts of game windows that are actually drawn, instead of each window's full declared area.

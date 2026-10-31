@@ -146,8 +146,8 @@ public sealed class ConfigWindow : Window
             config.Phase2FloorVideo = floor;
             save();
         }
-        ImGui.TextWrapped("The floor video is drawn over the game, so it also covers players and ground markers. " +
-            "Lower the opacity if mechanics get hard to read. It follows the music when that is playing.");
+        ImGui.TextWrapped("Characters and bosses stay in front of the video. Ground markers and effects are covered, " +
+            "so lower the opacity if mechanics get hard to read. It follows the music when that is playing.");
 
         var preview = PreviewFloor;
         if (ImGui.Checkbox("Preview the floor here (until this window closes)", ref preview))
@@ -187,6 +187,8 @@ public sealed class ConfigWindow : Window
         ImGui.SameLine();
         var keepHud = config.FloorKeepHudVisible;
         changed |= ImGui.Checkbox("Keep HUD visible", ref keepHud);
+        var behind = config.FloorBehindCharacters;
+        changed |= ImGui.Checkbox("Keep characters in front of the video", ref behind);
 
         if (changed)
         {
@@ -200,6 +202,7 @@ public sealed class ConfigWindow : Window
             config.FloorRound = round;
             config.FloorCropToFill = crop;
             config.FloorKeepHudVisible = keepHud;
+            config.FloorBehindCharacters = behind;
             save();
         }
 

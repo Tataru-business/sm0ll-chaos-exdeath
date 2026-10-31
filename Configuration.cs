@@ -29,6 +29,7 @@ public sealed class Configuration : IPluginConfiguration
     public bool FloorCropToFill { get; set; } = true;
     public float FloorOpacity { get; set; } = 0.85f;
     public bool FloorKeepHudVisible { get; set; } = true;
+    public bool FloorBehindCharacters { get; set; } = true;
     // Kept only to migrate settings saved by earlier releases.
     public bool ShowGarudaInPhase1 { get; set; } = false;
     public bool ShowDancingGreenInPhase2 { get; set; } = false;
