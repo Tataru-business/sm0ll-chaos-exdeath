@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>1.0.14.0</Version>
+    <Version>1.0.15.0</Version>
     <Author>DMU Model Scale</Author>
     <Name>Sm0ll Chaos &amp; Exdeath</Name>
     <Punchline>Locally shrink Chaos and Exdeath models in Dancing Mad (Ultimate).</Punchline>
@@ -12,6 +12,11 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <!-- Media Foundation and Direct3D 11 bindings for the floor video. Dalamud ships this assembly. -->
+    <Reference Include="TerraFX.Interop.Windows">
+      <HintPath>$(DalamudLibPath)TerraFX.Interop.Windows.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <EmbeddedResource Include="Assets\Audio\*.mp3" />
   </ItemGroup>
 </Project>

@@ -42,6 +42,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     [PluginService] private static IGameConfig GameConfig { get; set; } = null!;
     [PluginService] private static IGameInteropProvider GameInteropProvider { get; set; } = null!;
     [PluginService] private static IDutyState DutyState { get; set; } = null!;
+    [PluginService] private static IGameGui GameGui { get; set; } = null!;
 
     private readonly Dictionary<nint, CapturedScale> captured = new();
     private readonly WindowSystem windows = new("DMUModelScale");
@@ -51,6 +52,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     private readonly DmuPhaseTracker phaseTracker;
     private readonly KefkaModelController modelController;
     private readonly VfxSwapController vfxSwapController;
+    private readonly VideoFloorController videoFloor;
     private Hook<ActionEffectHandler.Delegates.Receive>? actionEffectHook;
     private string actionHookStatus = string.Empty;
 
@@ -72,8 +74,10 @@ public sealed unsafe class Plugin : IDalamudPlugin
         phaseTracker = new DmuPhaseTracker(ObjectTable);
         modelController = new KefkaModelController(ObjectTable, NamePlateGui);
         vfxSwapController = new VfxSwapController(GameInteropProvider);
+        videoFloor = new VideoFloorController(PluginInterface.UiBuilder, GameGui, config, () => audio.CurrentMediaClock);
         configWindow = new ConfigWindow(config, SaveConfig, () => audio.Status + actionHookStatus,
-            () => modelController.Status + vfxSwapController.Status);
+            () => modelController.Status + vfxSwapController.Status, () => videoFloor.Status,
+            () => ObjectTable.LocalPlayer?.Position);
         windows.AddWindow(configWindow);
         PluginInterface.UiBuilder.Draw += windows.Draw;
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfig;
@@ -109,7 +113,11 @@ public sealed unsafe class Plugin : IDalamudPlugin
         var inDuty = config.Enabled && ClientState.IsLoggedIn && ClientState.TerritoryType == TerritoryId;
         var phase = phaseTracker.Update(inDuty);
         vfxSwapController.Update(inDuty, phase, config.Brainrot, config.Brainrot);
-        audio.Update(inDuty, phase, config.Brainrot);
+        var mediaPath = GetPhase2MediaPath();
+        audio.Update(inDuty, phase, config.Brainrot, config.Phase2MediaMusic ? mediaPath : null);
+        var showFloor = config.Enabled && config.Phase2FloorVideo &&
+            ((inDuty && phase == AudioPhase.Phase2 && config.Brainrot) || configWindow.PreviewFloor);
+        videoFloor.Update(showFloor, mediaPath);
         modelController.Update(inDuty, phase, config.Brainrot, config.Brainrot);
         if (!config.Enabled || !ClientState.IsLoggedIn || ClientState.TerritoryType != TerritoryId)
         {
@@ -165,6 +173,12 @@ public sealed unsafe class Plugin : IDalamudPlugin
                 stale.Add(address);
         foreach (var address in stale)
             captured.Remove(address);
+    }
+
+    private string? GetPhase2MediaPath()
+    {
+        var path = config.Phase2MediaPath;
+        return !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? path : null;
     }
 
     private void OnNewPull(IDutyStateEventArgs _)
@@ -274,6 +288,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         actionEffectHook?.Dispose();
         vfxSwapController.Dispose();
         Framework.Update -= OnFrameworkUpdate;
+        videoFloor.Dispose();
         DutyState.DutyStarted -= OnNewPull;
         DutyState.DutyRecommenced -= OnNewPull;
         audio.Dispose();

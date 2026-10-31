@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using Dalamud.Game.Config;
@@ -9,13 +10,21 @@ using NAudio.Wave;
 
 namespace DMUModelScale;
 
+/// <summary>Where the player's Phase 2 media audio is, sampled on a framework update.</summary>
+internal sealed record MediaClock(string Path, double Seconds, long Timestamp, bool Playing);
+
 internal sealed unsafe class AudioController(IGameConfig gameConfig, string cacheDirectory) : IDisposable
 {
     private readonly List<(WaveOutEvent Output, AudioFileReader Reader)> effects = new();
     private WaveOutEvent? bgmOutput;
     private AudioFileReader? bgmReader;
     private AudioPhase activeBgmPhase = AudioPhase.Outside;
+    private string? activeBgmKey;
+    private string? activeMediaPath;
     private string? failedBgmAsset;
+    private string? failedMediaPath;
+    private string mediaError = string.Empty;
+    private volatile MediaClock? mediaClock;
     private bool failedBonk;
     private bool gameBgmSuppressed;
     private bool lastGameBgmEnabled = true;
@@ -24,11 +33,15 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
 
     public string Status => status;
 
+    /// <summary>Playback position of the Phase 2 media file, or null while it is not playing.</summary>
+    public MediaClock? CurrentMediaClock => mediaClock;
+
     public void QueueSlam() => Interlocked.Increment(ref pendingSlams);
 
-    public void Update(bool inDuty, AudioPhase phase, bool brainrot)
+    public void Update(bool inDuty, AudioPhase phase, bool brainrot, string? phase2MediaPath)
     {
-        UpdateBgm(inDuty, phase, brainrot);
+        UpdateBgm(inDuty, phase, brainrot, phase2MediaPath);
+        UpdateMediaClock();
 
         for (var i = effects.Count - 1; i >= 0; i--)
         {
@@ -62,7 +75,7 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
         }
     }
 
-    private void UpdateBgm(bool inDuty, AudioPhase phase, bool replaceBgm)
+    private void UpdateBgm(bool inDuty, AudioPhase phase, bool replaceBgm, string? phase2MediaPath)
     {
         var asset = phase switch
         {
@@ -70,10 +83,16 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
             AudioPhase.Phase2 => "Phase2.mp3",
             _ => "Circus.mp3"
         };
+        // The player's own file replaces the bundled Phase 2 track. If it fails, fall back to the bundled one.
+        var media = phase == AudioPhase.Phase2 && phase2MediaPath is not null && failedMediaPath != phase2MediaPath
+            ? phase2MediaPath
+            : null;
+        var key = media ?? asset;
         if (!inDuty || !replaceBgm)
         {
             StopBgm();
             failedBgmAsset = null;
+            failedMediaPath = null;
             status = inDuty ? "Fight BGM replacement is off." : "Audio plays only inside Dancing Mad (Ultimate).";
             return;
         }
@@ -95,7 +114,7 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
             return;
         }
 
-        if (failedBgmAsset == asset)
+        if (failedBgmAsset == key)
         {
             RestoreGameBgm();
             return;
@@ -115,12 +134,12 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
         if (bgmOutput?.PlaybackState == PlaybackState.Stopped)
         {
             StopBgm();
-            failedBgmAsset = asset;
+            failedBgmAsset = key;
             status = "Audio output stopped. Toggle Brainrot off and on to retry.";
             return;
         }
 
-        if (bgmOutput is not null && activeBgmPhase == phase)
+        if (bgmOutput is not null && activeBgmKey == key)
         {
             bgmReader!.Volume = volume;
             if (bgmOutput.PlaybackState == PlaybackState.Paused)
@@ -129,10 +148,25 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
         }
 
         StopBgm(false);
+        if (media is not null)
+        {
+            try
+            {
+                StartBgm(media, key, phase, volume, media);
+                return;
+            }
+            catch (Exception ex)
+            {
+                StopBgm(false);
+                failedMediaPath = media;
+                mediaError = $" Your Phase 2 media file could not play, so the bundled track is used: {ex.Message}";
+            }
+        }
+
         try
         {
             var path = GetBundledPath(asset);
-            StartBgm(path, phase, volume);
+            StartBgm(path, asset, phase, volume, null);
         }
         catch (Exception ex)
         {
@@ -140,6 +174,23 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
             failedBgmAsset = asset;
             status = $"Bundled BGM could not start: {ex.Message}";
         }
+    }
+
+    private void UpdateMediaClock()
+    {
+        if (bgmOutput is null || bgmReader is null || activeMediaPath is null)
+        {
+            mediaClock = null;
+            return;
+        }
+
+        // WaveOut reports what has actually been played, so the video follows what is heard.
+        var total = bgmReader.TotalTime.TotalSeconds;
+        var bytesPerSecond = bgmOutput.OutputWaveFormat.AverageBytesPerSecond;
+        var played = bytesPerSecond > 0 ? bgmOutput.GetPosition() / (double)bytesPerSecond : 0;
+        var position = total > 0 ? played % total : played;
+        mediaClock = new MediaClock(activeMediaPath, position, Stopwatch.GetTimestamp(),
+            bgmOutput.PlaybackState == PlaybackState.Playing);
     }
 
     private bool TryReadBgmSettings(out bool enabled, out float volume)
@@ -212,11 +263,14 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
         return path;
     }
 
-    private void StartBgm(string path, AudioPhase phase, float volume)
+    private void StartBgm(string path, string key, AudioPhase phase, float volume, string? mediaPath)
     {
         activeBgmPhase = phase;
+        activeBgmKey = key;
+        activeMediaPath = mediaPath;
         try
         {
+            // Formats other than WAV, MP3 and AIFF (MP4, M4A, FLAC, ...) are decoded by Windows Media Foundation.
             bgmReader = new AudioFileReader(path);
             if (bgmReader.TotalTime <= TimeSpan.Zero)
                 throw new InvalidDataException("BGM file is empty.");
@@ -225,6 +279,11 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
             bgmOutput = new WaveOutEvent();
             bgmOutput.Init(new LoopingSampleProvider(bgmReader));
             bgmOutput.Play();
+            if (mediaPath is not null)
+            {
+                status = "Playing your Phase 2 media file at the game's BGM volume.";
+                return;
+            }
             var phaseName = phase switch
             {
                 AudioPhase.Phase1 => "Phase 1",
@@ -232,6 +291,8 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
                 _ => "Phase 3+ Circus"
             };
             status = $"Playing bundled {phaseName} BGM at the game's BGM volume.";
+            if (phase == AudioPhase.Phase2 && failedMediaPath is not null)
+                status += mediaError;
         }
         catch
         {
@@ -247,6 +308,9 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
         bgmReader?.Dispose();
         bgmReader = null;
         activeBgmPhase = AudioPhase.Outside;
+        activeBgmKey = null;
+        activeMediaPath = null;
+        mediaClock = null;
 
         if (restoreGameBgm)
             RestoreGameBgm();

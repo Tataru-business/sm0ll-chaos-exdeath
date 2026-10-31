@@ -8,6 +8,15 @@ Chaotic mode is off by default. When enabled, Chaos uses **0.30** while not cast
 
 The model size uses `DrawObject.Scale`. When the optional lifebar checkbox is on, the plugin also adjusts `NameplateOffsetTarget.Y` to move the floating name and lifebar. Its fixed height adjustment is **−0.33** relative to the model scale. The plugin does not write to hitboxes, positions, targeting state, or combat logic. It reapplies the chosen settings on `Framework.Update` and restores the captured originals when disabled, when you leave the duty, or when the plugin unloads while the same model is still present. The lifebar adjustment still needs an in-game check in the duty.
 
+## Phase 2 media file
+
+Under **Brainrot → Phase 2 media file** you can pick a video or audio file on your own PC (MP4, MKV, WebM, MOV, M4A, MP3, FLAC, WAV and other formats Windows can play). The plugin plays it from that file; nothing is uploaded or bundled.
+
+- **Use its audio as the Phase 2 music** replaces the bundled Phase 2 track. It follows the game's BGM volume like the other tracks. If the file cannot be played, the bundled track is used.
+- **Show its video on the arena floor** draws the video flat on the floor during Phase 2, decoded at the file's full resolution with Windows Media Foundation. It follows the music's position while the music plays, and loops on its own otherwise.
+
+The floor video is a screen overlay, not a change to the game's floor. It is drawn over players, effects and ground markers, so lower **Opacity** if mechanics get hard to read. **Keep HUD visible** leaves gaps around game windows such as hotbars and the party list. The default floor is a 40-yalm square centred on (100, 100). Turn on **Preview the floor here** and use **Center on me** and the sliders to place it, as the Phase 2 arena layout has not been checked in a live duty. WebM and MKV playback needs the codecs Windows uses for those formats (for example, Web Media Extensions for VP9/Opus).
+
 ## Install through Dalamud
 
 Paste this **custom plugin repository URL** into Dalamud's **Experimental → Custom Plugin Repositories** setting:

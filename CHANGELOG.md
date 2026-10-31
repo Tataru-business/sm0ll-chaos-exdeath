@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.15.0
+
+- Added a Phase 2 media file setting under Brainrot. Pick a video or audio file on your PC and its audio replaces the Phase 2 music. The file is played from disk and is never bundled.
+- Added an optional Phase 2 floor video. The chosen file's video is drawn on the arena floor at full resolution, kept in sync with the music, with settings for position, size, rotation, round or square shape, opacity and keeping the HUD visible. A preview mode lets you place it outside the fight.
+
 ## 1.0.14.0
 
 - Bundled fight music now follows the game's BGM and master volume sliders and pauses when BGM is turned off. The game BGM checkbox is no longer changed by the plugin.
