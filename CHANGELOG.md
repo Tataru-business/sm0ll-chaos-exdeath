@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.17.0
+
+- Fixed rectangular holes in the floor video. Keep HUD visible now cuts out only the parts of game windows that are actually drawn, instead of each window's full declared area.
+- The game's own fight music is now fully muted while replacement music plays, including the time-stretched BGM and stinger channels the BGM switch did not cover.
+
 ## 1.0.16.0
 
 - The floor video now fits the whole arena by default: a round floor of radius 20 centred on (100, 100), matching the Dancing Mad (Ultimate) arena. Settings saved by 1.0.15.0 are moved to these values once.

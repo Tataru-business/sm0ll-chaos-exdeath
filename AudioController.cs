@@ -15,7 +15,10 @@ internal sealed record MediaClock(string Path, double Seconds, long Timestamp, b
 
 internal sealed unsafe class AudioController(IGameConfig gameConfig, string cacheDirectory) : IDisposable
 {
+    private static readonly SoundBus[] ExtraMusicBuses = [SoundBus.TimeStretchBGM, SoundBus.Zingle];
+
     private readonly List<(WaveOutEvent Output, AudioFileReader Reader)> effects = new();
+    private readonly bool[] savedBusMuted = new bool[ExtraMusicBuses.Length];
     private WaveOutEvent? bgmOutput;
     private AudioFileReader? bgmReader;
     private AudioPhase activeBgmPhase = AudioPhase.Outside;
@@ -219,6 +222,19 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
         // Mute the native BGM bus without changing the player's BGM checkbox.
         // Repeat on framework updates because the game can reapply its setting.
         sound->SetBgmEnabled(false);
+
+        // Fights can also play music on the time-stretched BGM and short stinger buses,
+        // which the BGM switch does not cover. Remember their state once and mute them.
+        var busMuted = sound->BusMuted;
+        for (var i = 0; i < ExtraMusicBuses.Length; i++)
+        {
+            var index = (int)ExtraMusicBuses[i];
+            if (index >= busMuted.Length)
+                continue;
+            if (!gameBgmSuppressed)
+                savedBusMuted[i] = busMuted[index];
+            busMuted[index] = true;
+        }
         gameBgmSuppressed = true;
     }
 
@@ -236,6 +252,10 @@ internal sealed unsafe class AudioController(IGameConfig gameConfig, string cach
                     ? muted == 0
                     : lastGameBgmEnabled;
                 sound->SetBgmEnabled(enabled);
+                var busMuted = sound->BusMuted;
+                for (var i = 0; i < ExtraMusicBuses.Length; i++)
+                    if ((int)ExtraMusicBuses[i] < busMuted.Length)
+                        busMuted[(int)ExtraMusicBuses[i]] = savedBusMuted[i];
             }
             catch (Exception ex)
             {

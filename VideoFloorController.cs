@@ -320,15 +320,20 @@ internal sealed unsafe class VideoFloorController : IDisposable
                 var unit = list.Entries[i].Value;
                 if (unit == null || !unit->IsVisible || unit->RootNode == null)
                     continue;
-                var scale = unit->Scale;
-                var width = unit->RootNode->Width * scale;
-                var height = unit->RootNode->Height * scale;
+
+                // A window's declared size is often much larger than what it draws, and some
+                // windows are "visible" while drawing nothing. Use only the parts actually on screen.
+                var bounds = new Vector4(float.MaxValue, float.MaxValue, float.MinValue, float.MinValue);
+                AddDrawnParts(&unit->UldManager, ref bounds, 0);
+                if (bounds.X >= bounds.Z || bounds.Y >= bounds.W)
+                    continue;
+                var width = bounds.Z - bounds.X;
+                var height = bounds.W - bounds.Y;
                 // Full-screen layers such as nameplates and screen text would hide the whole floor.
                 if (width <= 1 || height <= 1 || width * height > screenArea * 0.4f)
                     continue;
-                var x = viewportMin.X + unit->X;
-                var y = viewportMin.Y + unit->Y;
-                hud.Add(new Vector4(x, y, x + width, y + height));
+                hud.Add(new Vector4(viewportMin.X + bounds.X, viewportMin.Y + bounds.Y,
+                    viewportMin.X + bounds.Z, viewportMin.Y + bounds.W));
             }
         }
 
@@ -386,6 +391,57 @@ internal sealed unsafe class VideoFloorController : IDisposable
             if (!float.IsNaN(runStart))
                 AddClip(runStart, top, xs[^1], bottom);
         }
+    }
+
+    /// <summary>Grows <paramref name="bounds"/> to cover every image and text node that is actually drawn.</summary>
+    private static void AddDrawnParts(AtkUldManager* uld, ref Vector4 bounds, int depth)
+    {
+        if (uld == null || uld->NodeList == null)
+            return;
+        for (var i = 0; i < uld->NodeListCount; i++)
+        {
+            var node = uld->NodeList[i];
+            if (node == null)
+                continue;
+
+            if ((int)node->Type >= 1000)
+            {
+                // Component nodes (buttons, gauges, lists) keep their parts in their own node list.
+                var component = ((AtkComponentNode*)node)->Component;
+                if (component != null && depth < 4)
+                    AddDrawnParts(&component->UldManager, ref bounds, depth + 1);
+                continue;
+            }
+
+            if (node->Type is not (NodeType.Image or NodeType.NineGrid or NodeType.Text or NodeType.Counter))
+                continue;
+            if (node->Width == 0 || node->Height == 0 || !IsDrawn(node, out var scaleX, out var scaleY))
+                continue;
+
+            var left = node->ScreenX;
+            var top = node->ScreenY;
+            var right = left + node->Width * scaleX;
+            var bottom = top + node->Height * scaleY;
+            if (!float.IsFinite(left) || !float.IsFinite(top) || !float.IsFinite(right) || !float.IsFinite(bottom))
+                continue;
+            bounds = new Vector4(MathF.Min(bounds.X, left), MathF.Min(bounds.Y, top),
+                MathF.Max(bounds.Z, right), MathF.Max(bounds.W, bottom));
+        }
+    }
+
+    /// <summary>A node is drawn only if it and all its parents are visible and not fully transparent.</summary>
+    private static bool IsDrawn(AtkResNode* node, out float scaleX, out float scaleY)
+    {
+        scaleX = 1f;
+        scaleY = 1f;
+        for (var current = node; current != null; current = current->ParentNode)
+        {
+            if (!current->IsVisible() || current->Alpha_2 == 0)
+                return false;
+            scaleX *= current->ScaleX;
+            scaleY *= current->ScaleY;
+        }
+        return scaleX > 0 && scaleY > 0;
     }
 
     private void AddClip(float left, float top, float right, float bottom)
