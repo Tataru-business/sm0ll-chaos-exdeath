@@ -24,10 +24,13 @@ internal struct FloorConstants
     /// <summary>xyz: camera position, w: height of the floor plane.</summary>
     public Vector4 CameraAndFloor;
 
-    /// <summary>Scene depth d maps to view distance B / (d - A). x: A, y: B, z: occlusion height, w: 1 if depth is usable.</summary>
+    /// <summary>
+    /// Scene depth d maps to view distance B / (d - A). x: A, y: B, z: occlusion height (floor) or
+    /// distance tolerance (screen), w: 1 if depth is usable.
+    /// </summary>
     public Vector4 Depth;
 
-    /// <summary>xy: output size in pixels, z: opacity.</summary>
+    /// <summary>xy: output size in pixels, z: opacity, w: 1 for an upright screen, 0 for the floor.</summary>
     public Vector4 Output;
 }
 
@@ -89,7 +92,13 @@ internal sealed unsafe class FloorRenderer : IDisposable
                 if (abs(denominator) > 1e-8)
                 {
                     float sceneDistance = Depth.y / denominator;
-                    if (sceneDistance > 0.0 && sceneDistance < input.viewDistance)
+                    if (Output.w > 0.5)
+                    {
+                        // Upright screen: hide it wherever anything is clearly closer to the camera.
+                        if (sceneDistance > 0.0 && sceneDistance < input.viewDistance - Depth.z)
+                            discard;
+                    }
+                    else if (sceneDistance > 0.0 && sceneDistance < input.viewDistance)
                     {
                         // Something is in front of the floor on this pixel. Find how high above the
                         // floor it is: points on the same view ray scale with view distance.

@@ -75,6 +75,13 @@ public sealed unsafe class Plugin : IDalamudPlugin
             config.Version = 3;
             PluginInterface.SavePluginConfig(config);
         }
+        if (config.Version < 4)
+        {
+            // 1.0.19.0 shows the video on a screen south of the arena instead of on the floor.
+            config.VideoAsScreen = true;
+            config.Version = 4;
+            PluginInterface.SavePluginConfig(config);
+        }
         config.ChaosScale = ClampScale(config.ChaosScale);
         config.ExdeathScale = ClampScale(config.ExdeathScale);
 

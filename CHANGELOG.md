@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.19.0
+
+- The Phase 2 video now plays on an upright screen 50 yalms south of the arena centre, facing the arena, instead of on the floor. Its bottom edge sits at ground level and its height follows the video's shape. Direction, distance, width, height and opacity can be changed, and the floor placement is still available.
+- Characters and anything else closer to the camera stay in front of the screen.
+
 ## 1.0.18.0
 
 - The floor video is now rendered on the GPU using the game's depth buffer, so characters and bosses stay in front of it instead of being covered. Turn off "Keep characters in front of the video" if this misbehaves.

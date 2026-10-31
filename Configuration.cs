@@ -6,7 +6,7 @@ namespace DMUModelScale;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 3;
+    public int Version { get; set; } = 4;
     public bool Enabled { get; set; } = true;
     public float ChaosScale { get; set; } = 0.60f;
     public float ExdeathScale { get; set; } = 0.60f;
@@ -30,6 +30,14 @@ public sealed class Configuration : IPluginConfiguration
     public float FloorOpacity { get; set; } = 0.85f;
     public bool FloorKeepHudVisible { get; set; } = true;
     public bool FloorBehindCharacters { get; set; } = true;
+
+    // Upright screen placement: a cinema-style screen outside the arena, facing its centre.
+    public bool VideoAsScreen { get; set; } = true;
+    public float ScreenDirection { get; set; } = 0f; // 0 = south of the arena, 90 = west, 180 = north, 270 = east
+    public float ScreenDistance { get; set; } = 50f;
+    public float ScreenWidth { get; set; } = 48f;
+    public float ScreenElevation { get; set; } = 0f;
+    public float ScreenOpacity { get; set; } = 1f;
     // Kept only to migrate settings saved by earlier releases.
     public bool ShowGarudaInPhase1 { get; set; } = false;
     public bool ShowDancingGreenInPhase2 { get; set; } = false;

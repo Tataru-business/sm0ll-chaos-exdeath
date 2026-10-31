@@ -141,16 +141,32 @@ public sealed class ConfigWindow : Window
         }
 
         var floor = config.Phase2FloorVideo;
-        if (ImGui.Checkbox("Show its video on the arena floor", ref floor))
+        if (ImGui.Checkbox("Show its video in Phase 2", ref floor))
         {
             config.Phase2FloorVideo = floor;
             save();
         }
-        ImGui.TextWrapped("Characters and bosses stay in front of the video. Ground markers and effects are covered, " +
-            "so lower the opacity if mechanics get hard to read. It follows the music when that is playing.");
+
+        var asScreen = config.VideoAsScreen;
+        if (ImGui.RadioButton("On a screen outside the arena", asScreen))
+        {
+            config.VideoAsScreen = true;
+            save();
+        }
+        ImGui.SameLine();
+        if (ImGui.RadioButton("On the arena floor", !asScreen))
+        {
+            config.VideoAsScreen = false;
+            save();
+        }
+        ImGui.TextWrapped(config.VideoAsScreen
+            ? "An upright screen stands outside the arena, facing its centre. Characters in front of it stay visible. " +
+              "It follows the music when that is playing."
+            : "Characters and bosses stay in front of the video. Ground markers and effects are covered, " +
+              "so lower the opacity if mechanics get hard to read. It follows the music when that is playing.");
 
         var preview = PreviewFloor;
-        if (ImGui.Checkbox("Preview the floor here (until this window closes)", ref preview))
+        if (ImGui.Checkbox("Preview it here (until this window closes)", ref preview))
             PreviewFloor = preview;
         ImGui.SameLine();
         if (ImGui.Button("Center on me") && playerPosition() is { } position)
@@ -159,6 +175,13 @@ public sealed class ConfigWindow : Window
             config.FloorHeight = position.Y;
             config.FloorCenterZ = position.Z;
             save();
+        }
+
+        if (config.VideoAsScreen)
+        {
+            DrawScreenSettings();
+            ImGui.TextWrapped(floorStatus());
+            return;
         }
 
         var changed = false;
@@ -207,5 +230,42 @@ public sealed class ConfigWindow : Window
         }
 
         ImGui.TextWrapped(floorStatus());
+    }
+
+    private void DrawScreenSettings()
+    {
+        var changed = false;
+        var centerX = config.FloorCenterX;
+        var centerZ = config.FloorCenterZ;
+        var direction = config.ScreenDirection;
+        var distance = config.ScreenDistance;
+        var width = config.ScreenWidth;
+        var elevation = config.ScreenElevation;
+        var opacity = config.ScreenOpacity;
+        changed |= ImGui.DragFloat("Arena center X", ref centerX, 0.1f, -1000f, 1000f, "%.1f");
+        changed |= ImGui.DragFloat("Arena center Z", ref centerZ, 0.1f, -1000f, 1000f, "%.1f");
+        changed |= ImGui.SliderFloat("Direction", ref direction, 0f, 360f, "%.0f deg (0 = south)");
+        changed |= ImGui.SliderFloat("Distance from center", ref distance, 5f, 200f, "%.0f yalms");
+        changed |= ImGui.SliderFloat("Screen width", ref width, 5f, 200f, "%.0f yalms");
+        changed |= ImGui.SliderFloat("Raise above ground", ref elevation, -20f, 100f, "%.1f yalms");
+        changed |= ImGui.SliderFloat("Opacity", ref opacity, 0.05f, 1f, "%.2f");
+        var keepHud = config.FloorKeepHudVisible;
+        changed |= ImGui.Checkbox("Keep HUD visible", ref keepHud);
+        ImGui.SameLine();
+        var behind = config.FloorBehindCharacters;
+        changed |= ImGui.Checkbox("Keep characters in front of the screen", ref behind);
+
+        if (!changed)
+            return;
+        config.FloorCenterX = centerX;
+        config.FloorCenterZ = centerZ;
+        config.ScreenDirection = direction;
+        config.ScreenDistance = Math.Clamp(distance, 5f, 200f);
+        config.ScreenWidth = Math.Clamp(width, 5f, 200f);
+        config.ScreenElevation = elevation;
+        config.ScreenOpacity = Math.Clamp(opacity, 0.05f, 1f);
+        config.FloorKeepHudVisible = keepHud;
+        config.FloorBehindCharacters = behind;
+        save();
     }
 }

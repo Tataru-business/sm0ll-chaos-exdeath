@@ -29,6 +29,9 @@ internal sealed unsafe class VideoFloorController : IDisposable
     // Lift the video slightly above the game's floor so the two never fight over the same pixels.
     private const float FloorLift = 0.03f;
     private const int MaxUiPieces = 2048;
+    // Anything this much closer to the camera than the screen is drawn in front of it.
+    private const float ScreenDepthTolerance = 0.5f;
+    private const int ScreenCells = 8;
 
     private readonly IUiBuilder uiBuilder;
     private readonly Configuration config;
@@ -220,7 +223,11 @@ internal sealed unsafe class VideoFloorController : IDisposable
             return;
 
         var floorY = config.FloorMatchPlayerHeight && groundHeight is float ground ? ground : config.FloorHeight;
-        BuildFloor(floorY + FloorLift);
+        var screen = config.VideoAsScreen;
+        if (screen)
+            BuildScreen(floorY);
+        else
+            BuildFloor(floorY + FloorLift);
         BuildUiMask(viewportMin, viewportSize);
 
         renderer ??= new FloorRenderer(device, context);
@@ -234,8 +241,10 @@ internal sealed unsafe class VideoFloorController : IDisposable
         {
             ViewProjection = viewProjection,
             CameraAndFloor = new Vector4(camera, floorY),
-            Depth = new Vector4(depthA, depthB, OcclusionHeight, useDepth ? 1f : 0f),
-            Output = new Vector4(width, height, Math.Clamp(config.FloorOpacity, 0.05f, 1f), 0f)
+            // The floor hides only what stands above it; the screen hides behind anything closer than it.
+            Depth = new Vector4(depthA, depthB, screen ? ScreenDepthTolerance : OcclusionHeight, useDepth ? 1f : 0f),
+            Output = new Vector4(width, height,
+                Math.Clamp(screen ? config.ScreenOpacity : config.FloorOpacity, 0.05f, 1f), screen ? 1f : 0f)
         };
 
         renderer.Render(view, useDepth ? sceneDepth : null,
@@ -299,6 +308,52 @@ internal sealed unsafe class VideoFloorController : IDisposable
         for (var row = 0; row < rows; row++)
         {
             for (var column = 0; column < columns; column++)
+            {
+                var a = Vertex(row, column);
+                var b = Vertex(row, column + 1);
+                var c = Vertex(row + 1, column + 1);
+                var d = Vertex(row + 1, column);
+                floorVertices.Add(a);
+                floorVertices.Add(b);
+                floorVertices.Add(c);
+                floorVertices.Add(a);
+                floorVertices.Add(c);
+                floorVertices.Add(d);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds an upright screen outside the arena that faces the arena centre, like a cinema screen.
+    /// Its bottom edge sits at ground level and its height follows the video's shape.
+    /// </summary>
+    private void BuildScreen(float groundY)
+    {
+        floorVertices.Clear();
+        var arena = new Vector3(config.FloorCenterX, groundY, config.FloorCenterZ);
+        // Direction 0 points south (+Z); the angle turns towards west, north and east.
+        var angle = config.ScreenDirection * MathF.PI / 180f;
+        var outward = new Vector3(-MathF.Sin(angle), 0f, MathF.Cos(angle));
+        var center = arena + outward * Math.Max(1f, config.ScreenDistance);
+
+        // Seen from the arena, the viewer looks along "outward"; their right-hand side is this vector.
+        var right = new Vector3(-outward.Z, 0f, outward.X);
+        var width = Math.Max(1f, config.ScreenWidth);
+        var aspect = textureHeight > 0 ? textureWidth / (float)textureHeight : 16f / 9f;
+        var height = width / Math.Max(0.1f, aspect);
+        var bottom = groundY + config.ScreenElevation;
+
+        FloorVertex Vertex(int row, int column)
+        {
+            var u = column / (float)ScreenCells;
+            var v = row / (float)ScreenCells;
+            var world = center + right * ((u - 0.5f) * width) + new Vector3(0f, bottom + (1f - v) * height - groundY, 0f);
+            return new FloorVertex(world, new Vector2(u, v));
+        }
+
+        for (var row = 0; row < ScreenCells; row++)
+        {
+            for (var column = 0; column < ScreenCells; column++)
             {
                 var a = Vertex(row, column);
                 var b = Vertex(row, column + 1);
