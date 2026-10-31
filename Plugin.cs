@@ -42,6 +42,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
     [PluginService] private static IGameConfig GameConfig { get; set; } = null!;
     [PluginService] private static IGameInteropProvider GameInteropProvider { get; set; } = null!;
     [PluginService] private static IDutyState DutyState { get; set; } = null!;
+
     private readonly Dictionary<nint, CapturedScale> captured = new();
     private readonly WindowSystem windows = new("DMUModelScale");
     private readonly ConfigWindow configWindow;
@@ -50,7 +51,6 @@ public sealed unsafe class Plugin : IDalamudPlugin
     private readonly DmuPhaseTracker phaseTracker;
     private readonly KefkaModelController modelController;
     private readonly VfxSwapController vfxSwapController;
-    private readonly VideoFloorController videoFloor;
     private Hook<ActionEffectHandler.Delegates.Receive>? actionEffectHook;
     private string actionHookStatus = string.Empty;
 
@@ -64,24 +64,6 @@ public sealed unsafe class Plugin : IDalamudPlugin
             config.Version = 2;
             PluginInterface.SavePluginConfig(config);
         }
-        if (config.Version < 3)
-        {
-            // 1.0.15.0 placed a square floor; fit it to the round arena instead.
-            config.FloorCenterX = 100f;
-            config.FloorCenterZ = 100f;
-            config.FloorSize = 40f;
-            config.FloorRound = true;
-            config.FloorMatchPlayerHeight = true;
-            config.Version = 3;
-            PluginInterface.SavePluginConfig(config);
-        }
-        if (config.Version < 4)
-        {
-            // 1.0.19.0 shows the video on a screen south of the arena instead of on the floor.
-            config.VideoAsScreen = true;
-            config.Version = 4;
-            PluginInterface.SavePluginConfig(config);
-        }
         config.ChaosScale = ClampScale(config.ChaosScale);
         config.ExdeathScale = ClampScale(config.ExdeathScale);
 
@@ -90,10 +72,8 @@ public sealed unsafe class Plugin : IDalamudPlugin
         phaseTracker = new DmuPhaseTracker(ObjectTable);
         modelController = new KefkaModelController(ObjectTable, NamePlateGui);
         vfxSwapController = new VfxSwapController(GameInteropProvider);
-        videoFloor = new VideoFloorController(PluginInterface.UiBuilder, config, () => audio.CurrentMediaClock);
         configWindow = new ConfigWindow(config, SaveConfig, () => audio.Status + actionHookStatus,
-            () => modelController.Status + vfxSwapController.Status, () => videoFloor.Status,
-            () => ObjectTable.LocalPlayer?.Position);
+            () => modelController.Status + vfxSwapController.Status);
         windows.AddWindow(configWindow);
         PluginInterface.UiBuilder.Draw += windows.Draw;
         PluginInterface.UiBuilder.OpenConfigUi += ToggleConfig;
@@ -129,11 +109,7 @@ public sealed unsafe class Plugin : IDalamudPlugin
         var inDuty = config.Enabled && ClientState.IsLoggedIn && ClientState.TerritoryType == TerritoryId;
         var phase = phaseTracker.Update(inDuty);
         vfxSwapController.Update(inDuty, phase, config.Brainrot, config.Brainrot);
-        var mediaPath = GetPhase2MediaPath();
-        audio.Update(inDuty, phase, config.Brainrot, config.Phase2MediaMusic ? mediaPath : null);
-        var showFloor = config.Enabled && config.Phase2FloorVideo &&
-            ((inDuty && phase == AudioPhase.Phase2 && config.Brainrot) || configWindow.PreviewFloor);
-        videoFloor.Update(showFloor, mediaPath, ObjectTable.LocalPlayer?.Position.Y);
+        audio.Update(inDuty, phase, config.Brainrot);
         modelController.Update(inDuty, phase, config.Brainrot, config.Brainrot);
         if (!config.Enabled || !ClientState.IsLoggedIn || ClientState.TerritoryType != TerritoryId)
         {
@@ -189,12 +165,6 @@ public sealed unsafe class Plugin : IDalamudPlugin
                 stale.Add(address);
         foreach (var address in stale)
             captured.Remove(address);
-    }
-
-    private string? GetPhase2MediaPath()
-    {
-        var path = config.Phase2MediaPath;
-        return !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? path : null;
     }
 
     private void OnNewPull(IDutyStateEventArgs _)
@@ -304,7 +274,6 @@ public sealed unsafe class Plugin : IDalamudPlugin
         actionEffectHook?.Dispose();
         vfxSwapController.Dispose();
         Framework.Update -= OnFrameworkUpdate;
-        videoFloor.Dispose();
         DutyState.DutyStarted -= OnNewPull;
         DutyState.DutyRecommenced -= OnNewPull;
         audio.Dispose();

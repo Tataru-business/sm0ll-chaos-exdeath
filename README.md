@@ -8,17 +8,6 @@ Chaotic mode is off by default. When enabled, Chaos uses **0.30** while not cast
 
 The model size uses `DrawObject.Scale`. When the optional lifebar checkbox is on, the plugin also adjusts `NameplateOffsetTarget.Y` to move the floating name and lifebar. Its fixed height adjustment is **−0.33** relative to the model scale. The plugin does not write to hitboxes, positions, targeting state, or combat logic. It reapplies the chosen settings on `Framework.Update` and restores the captured originals when disabled, when you leave the duty, or when the plugin unloads while the same model is still present. The lifebar adjustment still needs an in-game check in the duty.
 
-## Phase 2 media file
-
-Under **Brainrot → Phase 2 media file** you can pick a video or audio file on your own PC (MP4, MKV, WebM, MOV, M4A, MP3, FLAC, WAV and other formats Windows can play). The plugin plays it from that file; nothing is uploaded or bundled.
-
-- **Use its audio as the Phase 2 music** replaces the bundled Phase 2 track. It follows the game's BGM volume like the other tracks. If the file cannot be played, the bundled track is used.
-- **Show its video in Phase 2** plays the video during Phase 2, decoded at the file's full resolution with Windows Media Foundation. It follows the music's position while the music plays, and loops on its own otherwise.
-- **On a screen outside the arena** (the default) shows it on an upright screen 50 yalms south of the arena centre, facing the arena, 48 yalms wide with its bottom edge at ground level. **Direction** (0 = south), **Distance from center**, **Screen width**, **Raise above ground** and **Opacity** move and resize it. Characters closer to the camera stay in front of it.
-- **On the arena floor** lays the video flat on the floor instead, using the settings below.
-
-The floor video is drawn by the plugin, not by changing the game's floor. It reads the game's depth buffer so characters and bosses stay in front of it (**Keep characters in front of the video**). Ground markers and spell effects are still covered, so lower **Opacity** if mechanics get hard to read. **Keep HUD visible** cuts out every drawn piece of game UI, such as hotbars and the party list. By default the video covers the whole arena: a round floor 40 yalms across centred on (100, 100), the arena bounds BossMod uses for this fight. **Crop to fill** keeps the video's proportions and trims its sides so no part of the arena is left uncovered. **Put it at ground level automatically** places it at the lowest point your character stands at. Turn on **Preview the floor here** and use **Center on me** and the sliders to place it somewhere else, for example to try it outside the fight. WebM and MKV playback needs the codecs Windows uses for those formats (for example, Web Media Extensions for VP9/Opus).
-
 ## Install through Dalamud
 
 Paste this **custom plugin repository URL** into Dalamud's **Experimental → Custom Plugin Repositories** setting:

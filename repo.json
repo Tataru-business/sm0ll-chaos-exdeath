@@ -3,8 +3,8 @@
     "Author": "DMU Model Scale",
     "Name": "Sm0ll Chaos & Exdeath",
     "InternalName": "DMUModelScale",
-    "AssemblyVersion": "1.0.19.0",
-    "Description": "Scales Chaos and Exdeath in territory 1363. Brainrot optionally enables P1/P2 model, name and VFX changes plus bundled phase music and a P3 slam sound, and can play your own Phase 2 media file as music and as a video on the arena floor. Visual options do not edit hitboxes, positions, targeting, or combat data.",
+    "AssemblyVersion": "1.0.14.0",
+    "Description": "Scales Chaos and Exdeath in territory 1363. Brainrot optionally enables P1/P2 model, name and VFX changes plus bundled phase music and a P3 slam sound. Visual options do not edit hitboxes, positions, targeting, or combat data.",
     "ApplicableVersion": "any",
     "RepoUrl": "https://github.com/Tataru-business/sm0ll-chaos-exdeath",
     "DalamudApiLevel": 15,
@@ -14,6 +14,6 @@
     "IsTestingExclusive": false,
     "DownloadLinkInstall": "https://raw.githubusercontent.com/Tataru-business/sm0ll-chaos-exdeath/main/dist/Sm0ll-Chaos-and-Exdeath-dev-plugin.zip",
     "DownloadLinkUpdate": "https://raw.githubusercontent.com/Tataru-business/sm0ll-chaos-exdeath/main/dist/Sm0ll-Chaos-and-Exdeath-dev-plugin.zip",
-    "LastUpdate": "1793410580"
+    "LastUpdate": "1791427123"
   }
 ]
